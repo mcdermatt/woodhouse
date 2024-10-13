@@ -1,7 +1,8 @@
 # woodhouse
 
-#TODO
+# TODO
 
+* [X] Set up repo
 * [ ] Convert controller input to twist command
 * [ ] convert twist to odrive command
 * [ ] run ICET odometry
