@@ -1,0 +1,18 @@
+axis_linear: 1  # Use axis 1 for forward/backward movement (usually the left joystick Y-axis)
+scale_linear: 10.0  # Scale factor for linear velocity
+
+# Axis for angular motion (turning)
+axis_angular: 0  # Use axis 0 for left/right rotation (usually the left joystick X-axis)
+scale_angular: 1.0  # Scale factor for angular velocity
+
+
+# # Optional: Deadzone configuration to avoid drift
+# deadzone:
+#   axis_linear: 0.1  # 10% deadzone for linear axis
+#   axis_angular: 0.1  # 10% deadzone for angular axis
+
+
+enable_button: 0
+enable_turbo_button: 1
+button_speed_scale: 4  # Button 2 for speed scaling (e.g., a shoulder button)
+

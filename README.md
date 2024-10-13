@@ -24,6 +24,8 @@ Run node for joystick input
 
 ```rosrun joy joy_node```
 
+```rosparam load $(rospack find woodhouse)/config/joy_config.yaml /teleop_twist_joy```
+
 ```rosrun teleop_twist_joy teleop_node```
 
 # TODO
