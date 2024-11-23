@@ -6,7 +6,7 @@ from odrive.enums import*
 
 class cmd2odrv():
 
-    def __init__(self, point_cloud_topic='/velodyne_points'): #'/os1_cloud_node/points'
+    def __init__(self):
 
         #init ODrive
         serial0 = "206A337B304B"
@@ -24,7 +24,8 @@ class cmd2odrv():
         # Extract and print the x-component of linear velocity
         rospy.loginfo("Linear x velocity: %f, Angular z velocity: %f", msg.linear.x, msg.angular.z)    
 
-        scale = 1000
+        # scale = 1000 #too fast
+        scale = 200
 
         L_wheel_setpoint = scale*(msg.linear.x + msg.angular.z)
         R_wheel_setpoint = -scale*(msg.linear.x - msg.angular.z)

@@ -36,6 +36,7 @@ Run node to convert button output to twist message
 
 #### General
 * [X] Set up repo
+* [] Set up laptop for control
 
 #### Basic motion
 
@@ -43,6 +44,7 @@ Run node to convert button output to twist message
 * [X] Convert twist to odrive command
 * [ ] Fine tune motor gains
 * [ ] Tune turning radius
+* [ ] publish battery status
 
 #### Mapping and Localization
 
@@ -61,9 +63,9 @@ Run node to convert button output to twist message
 
    ```ACTION=="add", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="3106", RUN+="/sbin/modprobe xpad", RUN+="/bin/sh -c 'echo 2dc8 3106 > /sys/bus/usb/drivers/xpad/new_id'"```
 
-* [ ] Tune damper tension for platform weight
-* [ ] Replace PSU with LIPOs
+* [X] Tune damper tension for platform weight
+* [X] Replace PSU with LIPOs
 * [ ] Add CAD to repo
-* [ ] CAD electronics enclosure for odrive + cpu + batteries
+* [X] CAD electronics enclosure for odrive + cpu + batteries
 * [ ] Spec sendcutsend sheet metal enclosure
  
