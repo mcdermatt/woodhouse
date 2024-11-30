@@ -35,26 +35,29 @@ Run node to convert button output to twist message
 # TODO
 
 #### General
+* [X] Set up laptop for control
 * [X] Set up repo
-* [] Set up laptop for control
 
 #### Basic motion
 
 * [X] Convert controller input to twist msg
 * [X] Convert twist to odrive command
-* [ ] Fine tune motor gains
-* [ ] Tune turning radius
+* [X] Fine tune motor gains
+* [X] Tune turning radius
 * [ ] publish battery status
 
 #### Mapping and Localization
 
-* [ ] run ICET odometry
-* [ ] Add simple histogram criteria for loop closure
+* [X] run ICET odometry
+* [X] Create keyframe grabber node (simple python)
+* [ ] Get keyframe descriptor-- scan context
+* [ ] Create loop closure detection node
 * [ ] compile gtsam for pose factors
 * [ ] get factor graph node working 
 
 #### Hardware
 
+* [ ] attach LiDAR sensor
 * [X] Order 80/20
 * [X] Spec dampers
 * [X] Get 8bitdo controller talking
@@ -63,9 +66,11 @@ Run node to convert button output to twist message
 
    ```ACTION=="add", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="3106", RUN+="/sbin/modprobe xpad", RUN+="/bin/sh -c 'echo 2dc8 3106 > /sys/bus/usb/drivers/xpad/new_id'"```
 
+* [ ] Laptop mount
+* [ ] LiDAR mount
 * [X] Tune damper tension for platform weight
 * [X] Replace PSU with LIPOs
-* [ ] Add CAD to repo
+* [X] Add shrinkwrapped CAD to repo
 * [X] CAD electronics enclosure for odrive + cpu + batteries
 * [ ] Spec sendcutsend sheet metal enclosure
  
