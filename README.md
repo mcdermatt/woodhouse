@@ -1,4 +1,22 @@
-# woodhouse
+# Woodhouse
+
+A tracked robotic platform for LiDAR mapping and valet applications
+
+![WIP](https://img.shields.io/badge/status-WIP-yellow)
+
+
+
+<table>
+  <tr>
+    <td style="text-align: center;">
+      <img src="./demo/frontV1.jpg" width="392" />
+    </td>
+    <td style="text-align: center;">
+      <img src="./demo/backV1.jpg" width="430" />
+    </td>
+  </tr>
+</table>
+
 
 # Requirements 
 * joy
