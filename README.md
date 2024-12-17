@@ -18,6 +18,10 @@ A tracked robotic platform for LiDAR mapping and valet applications
 </table>
 
 
+#### Mapping Overview
+
+<img src="./demo/woodhouse_rqt_graph.png" alt="Node Graph Overview" width="800"/>
+
 # Requirements 
 * joy
 
@@ -68,10 +72,12 @@ Run node to convert button output to twist message
 
 * [X] run ICET odometry
 * [X] Create keyframe grabber node (simple python)
-* [ ] Get keyframe descriptor-- scan context
-* [ ] Create loop closure detection node
-* [ ] compile gtsam for pose factors
-* [ ] get factor graph node working 
+* [X] Make roscpp node for loop closure canidatres with scan context
+* [ ] Explore message passing for scan context features--> Custom keyframe msg type, service, or local storage  
+* [ ] Check for loop closure -- get initial pose estimate
+* [ ] Run ICET again to obtain loop closure constraints
+* [ ] compile gtsam
+* [ ] make factor graph node
 
 #### Hardware
 
@@ -84,11 +90,12 @@ Run node to convert button output to twist message
 
    ```ACTION=="add", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="3106", RUN+="/sbin/modprobe xpad", RUN+="/bin/sh -c 'echo 2dc8 3106 > /sys/bus/usb/drivers/xpad/new_id'"```
 
-* [ ] Laptop mount
+* [X] Laptop mount
 * [ ] LiDAR mount
 * [X] Tune damper tension for platform weight
 * [X] Replace PSU with LIPOs
 * [X] Add shrinkwrapped CAD to repo
 * [X] CAD electronics enclosure for odrive + cpu + batteries
+* [X] CAD + print + install undercarriage assembly
 * [ ] Spec sendcutsend sheet metal enclosure
  

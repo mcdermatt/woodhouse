@@ -74,7 +74,7 @@ public:
             // Extract translation and rotation
             trans_ = transformStamped.transform.translation;
             rot_ = transformStamped.transform.rotation;
-            std::cout << "Translation: [" << trans_.x << ", " << trans_.y << ", " << trans_.z << "]" << std::endl;
+            // std::cout << "Translation: [" << trans_.x << ", " << trans_.y << ", " << trans_.z << "]" << std::endl;
             // std::cout << "Rotation: [" << rot_.x << ", " << rot_.y << ", " << rot_.z << ", " << rot_.w << "]" << std::endl;
 
         } catch (const tf2::TransformException& ex) {
@@ -87,7 +87,7 @@ public:
                                 + pow(pose_at_last_kf[1] - trans_.y, 2) 
                                 + pow(pose_at_last_kf[2] - trans_.z, 2));
 
-        std::cout << "dist since last kf " << dist_since_last_kf << endl;
+        // std::cout << "dist since last kf " << dist_since_last_kf << endl;
 
         if (dist_since_last_kf > dist_thresh && frames_since_last_kf > frame_thresh){
 
