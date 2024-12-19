@@ -73,9 +73,10 @@ Run node to convert button output to twist message
 * [X] run ICET odometry
 * [X] Create keyframe grabber node (simple python)
 * [X] Make roscpp node for loop closure canidatres with scan context
-* [ ] Explore message passing for scan context features--> Custom keyframe msg type, service, or local storage
+* [X] Explore message passing for scan context features--> Custom keyframe msg type, service, or local storage
 * [X] Make overview figure  
-* [ ] Make keyframe_data custom msg
+* [X] Make keyframe_data custom msg
+* [X] Detect loop closure canidates
 * [ ] loop closer node
 * [ ] topic vs service for fetching clouds from idx for loop closer node
 * [ ] Check for loop closure -- get initial pose estimate

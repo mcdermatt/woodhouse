@@ -14,9 +14,12 @@
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/Pose.h>
+#include <std_msgs/String.h>
 #include <tf/tf.h>
 #include <tf2/exceptions.h>
 #include <cmath>
+#include "woodhouse/KeyframeData.h"
 
 using namespace std;
 using namespace Eigen;
@@ -27,7 +30,7 @@ public:
     ScanContextNode() : nh_("~"), initialized_(false), tfListener_(tfBuffer_) {
         // Set up ROS subscribers and publishers
         pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &ScanContextNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
-        // odom_pub = nh_.advertise<nav_msgs::Odometry>("/odom", 50);
+        keyframe_data_pub_ =  nh_.advertise<woodhouse::KeyframeData>("/keyframe_data", 10);
 
         ros::Rate rate(10);
         pose_at_last_kf.resize(3);
@@ -81,7 +84,7 @@ public:
             ROS_ERROR("Transform error: %s", ex.what());
         }
         frames_since_last_kf++;
-        cout<< frames_since_last_kf << " " << pose_at_last_kf << endl;        
+        // cout<< frames_since_last_kf << " " << pose_at_last_kf << endl;        
 
         dist_since_last_kf = sqrt(pow(pose_at_last_kf[0] - trans_.x, 2) 
                                 + pow(pose_at_last_kf[1] - trans_.y, 2) 
@@ -95,18 +98,50 @@ public:
             sc_manager_.makeAndSaveScancontextAndKeys(*pcl_cloud_intensity);
             ROS_INFO("Scan context generated and saved!");
 
-            const Eigen::MatrixXd& latest_context = sc_manager_.polarcontexts_.back();
+            Eigen::MatrixXd& latest_context = sc_manager_.polarcontexts_.back();
+            Eigen::MatrixXd latest_keyring = sc_manager_.makeRingkeyFromScancontext(latest_context);
+
+            std::pair<int, float> result = sc_manager_.detectLoopClosureID();
+            int loop_id = result.first;
+            float yaw_diff_in_rad = result.second;
+            std::cout << "loop_id:" << loop_id << std::endl;
+
+
+            // auto after1 = std::chrono::system_clock::now();
+            // auto after1Ms = std::chrono::time_point_cast<std::chrono::milliseconds>(after1);
+            // auto elapsedTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(after1Ms - beforeMs).count();
+            // std::cout << "Estimated scan context in: " << elapsedTimeMs << " ms" << std::endl;
+
+            //create keyframe data msg
+            woodhouse::KeyframeData keyframe_msg;
+
+            //populate the message
+            keyframe_msg.scan_index = keyframeCount;
+            keyframe_msg.point_cloud = *msg;
+            std::vector<float> flattened_context;        
+            for (int i = 0; i < latest_context.rows(); ++i) {
+                for (int j = 0; j < latest_context.cols(); ++j) {
+                    flattened_context.push_back(static_cast<float>(latest_context(i, j)));
+                }
+            }
+            keyframe_msg.scan_context = flattened_context;
+            std::vector<float> flattened_keyring;        
+            for (int i = 0; i < latest_keyring.rows(); ++i) {
+                for (int j = 0; j < latest_keyring.cols(); ++j) {
+                    flattened_keyring.push_back(static_cast<float>(latest_keyring(i, j)));
+                }
+            }
+            keyframe_msg.ring_keys = flattened_keyring;
+
+            //publish the message
+            keyframe_data_pub_.publish(keyframe_msg);
+
 
             pose_at_last_kf[0] = static_cast<float>(trans_.x);
             pose_at_last_kf[1] = static_cast<float>(trans_.y);
             pose_at_last_kf[2] = static_cast<float>(trans_.z);
             frames_since_last_kf = 0;
-
-            auto after1 = std::chrono::system_clock::now();
-            auto after1Ms = std::chrono::time_point_cast<std::chrono::milliseconds>(after1);
-            auto elapsedTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(after1Ms - beforeMs).count();
-            std::cout << "Estimated scan context in: " << elapsedTimeMs << " ms" << std::endl;
-
+            keyframeCount++;
         }
 
 
@@ -142,11 +177,13 @@ private:
     tf2_ros::Buffer tfBuffer_;
     tf2_ros::TransformListener tfListener_;
     ros::Subscriber pointcloud_sub_;
+    ros::Publisher keyframe_data_pub_;
     SCManager sc_manager_; // ScanContext manager instance
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr prev_pcl_cloud_;
     bool initialized_;
     int frameCount = 0;
+    int keyframeCount = 0;
     int frames_since_last_kf = 0;
     float dist_since_last_kf = 0.;
     Eigen::VectorXf pose_at_last_kf;

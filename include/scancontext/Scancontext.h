@@ -76,18 +76,18 @@ public:
     // hyper parameters ()
     const double LIDAR_HEIGHT = 2.0; // lidar height : add this for simply directly using lidar scan in the lidar local coord (not robot base coord) / if you use robot-coord-transformed lidar scans, just set this as 0.
 
-    const int    PC_NUM_RING = 30; // 20 in the original paper (IROS 18)
-    const int    PC_NUM_SECTOR = 90; // 60 in the original paper (IROS 18)
+    const int    PC_NUM_RING = 40; // 20 in the original paper (IROS 18)
+    const int    PC_NUM_SECTOR = 100; // 60 in the original paper (IROS 18)
     const double PC_MAX_RADIUS = 80.0; // 80 meter max in the original paper (IROS 18)
     const double PC_UNIT_SECTORANGLE = 360.0 / double(PC_NUM_SECTOR);
     const double PC_UNIT_RINGGAP = PC_MAX_RADIUS / double(PC_NUM_RING);
 
     // tree
-    const int    NUM_EXCLUDE_RECENT = 50; // simply just keyframe gap, but node position distance-based exclusion is ok. 
+    const int    NUM_EXCLUDE_RECENT = 1; // 50 simply just keyframe gap, but node position distance-based exclusion is ok. 
     const int    NUM_CANDIDATES_FROM_TREE = 10; // 10 is enough. (refer the IROS 18 paper)
 
     // loop thres
-    const double SEARCH_RATIO = 0.1; // for fast comparison, no Brute-force, but search 10 % is okay. // not was in the original conf paper, but improved ver.
+    const double SEARCH_RATIO = 1.0; // 0.1 for fast comparison, no Brute-force, but search 10 % is okay. // not was in the original conf paper, but improved ver.
     const double SC_DIST_THRES = 0.13; // empirically 0.1-0.2 is fine (rare false-alarms) for 20x60 polar context (but for 0.15 <, DCS or ICP fit score check (e.g., in LeGO-LOAM) should be required for robustness)
     // const double SC_DIST_THRES = 0.5; // 0.4-0.6 is good choice for using with robust kernel (e.g., Cauchy, DCS) + icp fitness threshold / if not, recommend 0.1-0.15
 
