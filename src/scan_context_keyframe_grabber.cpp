@@ -20,6 +20,7 @@
 #include <tf2/exceptions.h>
 #include <cmath>
 #include "woodhouse/KeyframeData.h"
+#include "woodhouse/GetTheseClouds.h"
 
 using namespace std;
 using namespace Eigen;
@@ -31,13 +32,12 @@ public:
         // Set up ROS subscribers and publishers
         pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &ScanContextNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
         keyframe_data_pub_ =  nh_.advertise<woodhouse::KeyframeData>("/keyframe_data", 10);
+        get_these_clouds_pub_ =  nh_.advertise<woodhouse::GetTheseClouds>("/get_these_clouds", 10);
 
         ros::Rate rate(10);
         pose_at_last_kf.resize(3);
         pose_at_last_kf << 0., 0., 0.;
         rot_.w = 1.0; //needed for quat initialization
-
-
     }
 
     void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg) {
@@ -101,11 +101,36 @@ public:
             Eigen::MatrixXd& latest_context = sc_manager_.polarcontexts_.back();
             Eigen::MatrixXd latest_keyring = sc_manager_.makeRingkeyFromScancontext(latest_context);
 
-            std::pair<int, float> result = sc_manager_.detectLoopClosureID();
-            int loop_id = result.first;
-            float yaw_diff_in_rad = result.second;
-            std::cout << "loop_id:" << loop_id << std::endl;
+            // Flatten the latest context
+            Eigen::VectorXd latest_context_flat = Eigen::Map<Eigen::VectorXd>(latest_context.data(), latest_context.size());
 
+            // // Check if there are any previous contexts to compare against
+            // if (sc_manager_.polarcontexts_.size() > 1) {
+            //     for (size_t i = 0; i < sc_manager_.polarcontexts_.size() - 1; ++i) {
+            //         const Eigen::MatrixXd& previous_context = sc_manager_.polarcontexts_[i];
+
+            //         // Flatten the previous context
+            //         // Eigen::VectorXd previous_context_flat = Eigen::Map<Eigen::VectorXd>(previous_context.data(), previous_context.size());
+            //         Eigen::VectorXd previous_context_flat = Eigen::Map<const Eigen::VectorXd>(previous_context.data(), previous_context.size());
+
+            //         // Now you can compute cosine distance
+            //         double cosine_similarity = latest_context_flat.dot(previous_context_flat) /
+            //                                 (latest_context_flat.norm() * previous_context_flat.norm());
+            //         double distance = 1.0 - cosine_similarity;
+
+            //         // ROS_INFO("Cosine distance: %f", distance);
+            //         std::cout << "CosD between latest context and " << i << ": " << distance <<std::endl ;
+            //     }
+            // }
+
+            int loop_id = -1; // TEST-- bad idea initing to zero here?
+            if (keyframeCount > 0){
+                std::pair<int, float> result = sc_manager_.detectLoopClosureID();
+                loop_id = result.first;
+                float yaw_diff_in_rad = result.second;
+                std::cout << "loop_id:" << loop_id << std::endl;
+
+            }
 
             // auto after1 = std::chrono::system_clock::now();
             // auto after1Ms = std::chrono::time_point_cast<std::chrono::milliseconds>(after1);
@@ -114,7 +139,6 @@ public:
 
             //create keyframe data msg
             woodhouse::KeyframeData keyframe_msg;
-
             //populate the message
             keyframe_msg.scan_index = keyframeCount;
             keyframe_msg.point_cloud = *msg;
@@ -132,45 +156,51 @@ public:
                 }
             }
             keyframe_msg.ring_keys = flattened_keyring;
-
-            //publish the message
+            //publish the keyframe data message
             keyframe_data_pub_.publish(keyframe_msg);
 
+
+            //create message to tell pose graph node to grab these scans (only if valid match)
+            if (loop_id > -1){
+                woodhouse::GetTheseClouds get_clouds_msg;
+                get_clouds_msg.scan1_index = keyframeCount;
+                get_clouds_msg.scan2_index = loop_id;
+                get_these_clouds_pub_.publish(get_clouds_msg);
+            }
 
             pose_at_last_kf[0] = static_cast<float>(trans_.x);
             pose_at_last_kf[1] = static_cast<float>(trans_.y);
             pose_at_last_kf[2] = static_cast<float>(trans_.z);
             frames_since_last_kf = 0;
             keyframeCount++;
+
+
+            // std::cout << "Latest Scan Context:\n" << latest_context << "\n";
+
+            // //save csv
+            // std::ofstream file("latest_scan_context.csv");
+            // if (file.is_open()) {
+            //     file << latest_context.format(Eigen::IOFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ",", "\n"));
+            //     file.close();
+            // }
+
+            // //display with opencv
+            // cv::Mat context_image(latest_context.rows(), latest_context.cols(), CV_64F, const_cast<double*>(latest_context.data()));
+            // cv::normalize(context_image, context_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+            // cv::Mat resized_image;
+            // int scale_factor = 10; // Increase this for larger size
+            // cv::resize(context_image, resized_image, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
+            // // Display the resized image
+            // cv::imshow("Scan Context", resized_image);
+            // cv::waitKey(0);
         }
-
-
-        // std::cout << "Latest Scan Context:\n" << latest_context << "\n";
-
-        // //save csv
-        // std::ofstream file("latest_scan_context.csv");
-        // if (file.is_open()) {
-        //     file << latest_context.format(Eigen::IOFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ",", "\n"));
-        //     file.close();
-        // }
-
-        // //display with opencv
-        // cv::Mat context_image(latest_context.rows(), latest_context.cols(), CV_64F, const_cast<double*>(latest_context.data()));
-        // cv::normalize(context_image, context_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-        // cv::Mat resized_image;
-        // int scale_factor = 10; // Increase this for larger size
-        // cv::resize(context_image, resized_image, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
-        // // Display the resized image
-        // cv::imshow("Scan Context", resized_image);
-        // cv::waitKey(0);
-
 
     }
 
     Eigen::VectorXf X0;
 
 private:
-    const float dist_thresh = 2.0;
+    const float dist_thresh = 1.;
     const int frame_thresh = 10;
 
     ros::NodeHandle nh_;
@@ -178,6 +208,8 @@ private:
     tf2_ros::TransformListener tfListener_;
     ros::Subscriber pointcloud_sub_;
     ros::Publisher keyframe_data_pub_;
+    ros::Publisher get_these_clouds_pub_;
+
     SCManager sc_manager_; // ScanContext manager instance
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr prev_pcl_cloud_;
