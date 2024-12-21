@@ -171,6 +171,16 @@ target_link_libraries(scan_context_node
   tbb
 )
 
+add_executable(pose_graph_node 
+                src/pose_graph.cpp)
+target_link_libraries(pose_graph_node
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  tbb
+)
+
+
 #############
 ## Install ##
 #############
