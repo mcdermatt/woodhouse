@@ -184,15 +184,15 @@ public:
             //     file.close();
             // }
 
-            // //display with opencv
-            // cv::Mat context_image(latest_context.rows(), latest_context.cols(), CV_64F, const_cast<double*>(latest_context.data()));
-            // cv::normalize(context_image, context_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-            // cv::Mat resized_image;
-            // int scale_factor = 10; // Increase this for larger size
-            // cv::resize(context_image, resized_image, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
-            // // Display the resized image
-            // cv::imshow("Scan Context", resized_image);
-            // cv::waitKey(0);
+            //display with opencv
+            cv::Mat context_image(latest_context.rows(), latest_context.cols(), CV_64F, const_cast<double*>(latest_context.data()));
+            cv::normalize(context_image, context_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+            cv::Mat resized_image;
+            int scale_factor = 10; // Increase this for larger size
+            cv::resize(context_image, resized_image, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
+            // Display the resized image
+            cv::imshow("Scan Context", resized_image);
+            cv::waitKey(0);
         }
 
     }

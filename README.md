@@ -9,10 +9,10 @@ A tracked robotic platform for LiDAR mapping and valet applications
 <table>
   <tr>
     <td style="text-align: center;">
-      <img src="./demo/frontV1.jpg" width="392" />
+      <img src="./demo/frontV2.jpg" width="410" />
     </td>
     <td style="text-align: center;">
-      <img src="./demo/backV1.jpg" width="430" />
+      <img src="./demo/road.jpg" width="360" />
     </td>
   </tr>
 </table>
@@ -100,6 +100,5 @@ Run node to convert button output to twist message
 * [X] Add shrinkwrapped CAD to repo
 * [X] CAD electronics enclosure for odrive + cpu + batteries
 * [X] CAD + print + install undercarriage assembly
-* [ ] attach LiDAR sensor
-* [ ] Spec sendcutsend sheet metal enclosure
- 
+* [X] attach LiDAR sensor
+* [X] redesign rear swingarms to provide adequate tension when driving in reverse 
