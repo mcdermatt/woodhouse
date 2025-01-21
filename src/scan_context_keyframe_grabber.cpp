@@ -67,16 +67,21 @@ public:
         try {
             // Wait for the transform to become available
             ros::Duration timeout(4.0);
-            if (!tfBuffer_.canTransform("map", "sensor", ros::Time(0), timeout)) {
-                ROS_ERROR("Transform from 'map' to 'sensor' not available within the timeout.");
+            if (!tfBuffer_.canTransform("map", "velodyne", ros::Time(0), timeout)) {
+                ROS_ERROR("Transform from 'map' to 'velodyne' not available within the timeout.");
             }
 
             // Look up the transform
-            geometry_msgs::TransformStamped transformStamped = tfBuffer_.lookupTransform("map", "sensor", ros::Time(0));
+            geometry_msgs::TransformStamped transformStamped = tfBuffer_.lookupTransform("map", "velodyne", ros::Time(0));
 
             // Extract translation and rotation
             trans_ = transformStamped.transform.translation;
             rot_ = transformStamped.transform.rotation;
+            rot_eigen.x() = rot_.x;
+            rot_eigen.y() = rot_.y;
+            rot_eigen.z() = rot_.z;
+            rot_eigen.w() = rot_.w;
+
             // std::cout << "Translation: [" << trans_.x << ", " << trans_.y << ", " << trans_.z << "]" << std::endl;
             // std::cout << "Rotation: [" << rot_.x << ", " << rot_.y << ", " << rot_.z << ", " << rot_.w << "]" << std::endl;
 
@@ -92,6 +97,7 @@ public:
 
         // std::cout << "dist since last kf " << dist_since_last_kf << endl;
 
+        // Conditions to make a new keyframe
         if (dist_since_last_kf > dist_thresh && frames_since_last_kf > frame_thresh){
 
             // Compute the scan context descriptor
@@ -104,43 +110,18 @@ public:
             // Flatten the latest context
             Eigen::VectorXd latest_context_flat = Eigen::Map<Eigen::VectorXd>(latest_context.data(), latest_context.size());
 
-            // // Check if there are any previous contexts to compare against
-            // if (sc_manager_.polarcontexts_.size() > 1) {
-            //     for (size_t i = 0; i < sc_manager_.polarcontexts_.size() - 1; ++i) {
-            //         const Eigen::MatrixXd& previous_context = sc_manager_.polarcontexts_[i];
-
-            //         // Flatten the previous context
-            //         // Eigen::VectorXd previous_context_flat = Eigen::Map<Eigen::VectorXd>(previous_context.data(), previous_context.size());
-            //         Eigen::VectorXd previous_context_flat = Eigen::Map<const Eigen::VectorXd>(previous_context.data(), previous_context.size());
-
-            //         // Now you can compute cosine distance
-            //         double cosine_similarity = latest_context_flat.dot(previous_context_flat) /
-            //                                 (latest_context_flat.norm() * previous_context_flat.norm());
-            //         double distance = 1.0 - cosine_similarity;
-
-            //         // ROS_INFO("Cosine distance: %f", distance);
-            //         std::cout << "CosD between latest context and " << i << ": " << distance <<std::endl ;
-            //     }
-            // }
-
-            int loop_id = -1; // TEST-- bad idea initing to zero here?
+            int loop_id = -1;
             if (keyframeCount > 0){
                 std::pair<int, float> result = sc_manager_.detectLoopClosureID();
                 loop_id = result.first;
                 float yaw_diff_in_rad = result.second;
                 std::cout << "loop_id:" << loop_id << std::endl;
-
             }
-
-            // auto after1 = std::chrono::system_clock::now();
-            // auto after1Ms = std::chrono::time_point_cast<std::chrono::milliseconds>(after1);
-            // auto elapsedTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(after1Ms - beforeMs).count();
-            // std::cout << "Estimated scan context in: " << elapsedTimeMs << " ms" << std::endl;
 
             //create keyframe data msg
             woodhouse::KeyframeData keyframe_msg;
-            //populate the message
             keyframe_msg.scan_index = keyframeCount;
+            keyframe_msg.last_scan_index = keyframeCount - 1;
             keyframe_msg.point_cloud = *msg;
             std::vector<float> flattened_context;        
             for (int i = 0; i < latest_context.rows(); ++i) {
@@ -155,10 +136,20 @@ public:
                     flattened_keyring.push_back(static_cast<float>(latest_keyring(i, j)));
                 }
             }
-            keyframe_msg.ring_keys = flattened_keyring;
-            //publish the keyframe data message
-            keyframe_data_pub_.publish(keyframe_msg);
+            //get relative rotation since last keyframe
+            rot_eigen.normalize();
+            quat_at_last_kf.normalize();
+            Eigen::Quaternionf q_relative = rot_eigen * quat_at_last_kf.inverse();
+            keyframe_msg.odom_constraint.position.x = (trans_.x - pose_at_last_kf[0]);
+            keyframe_msg.odom_constraint.position.y = (trans_.y - pose_at_last_kf[1]);
+            keyframe_msg.odom_constraint.position.z = (trans_.z - pose_at_last_kf[2]);
+            keyframe_msg.odom_constraint.orientation.x = q_relative.x();
+            keyframe_msg.odom_constraint.orientation.y = q_relative.y();
+            keyframe_msg.odom_constraint.orientation.z = q_relative.z();
+            keyframe_msg.odom_constraint.orientation.w = q_relative.w();
 
+            keyframe_msg.ring_keys = flattened_keyring;
+            keyframe_data_pub_.publish(keyframe_msg);
 
             //create message to tell pose graph node to grab these scans (only if valid match)
             if (loop_id > -1){
@@ -171,28 +162,25 @@ public:
             pose_at_last_kf[0] = static_cast<float>(trans_.x);
             pose_at_last_kf[1] = static_cast<float>(trans_.y);
             pose_at_last_kf[2] = static_cast<float>(trans_.z);
+            quat_at_last_kf = rot_eigen;
             frames_since_last_kf = 0;
             keyframeCount++;
 
-
-            // std::cout << "Latest Scan Context:\n" << latest_context << "\n";
-
-            // //save csv
+            // //DEBUG save csv
             // std::ofstream file("latest_scan_context.csv");
             // if (file.is_open()) {
             //     file << latest_context.format(Eigen::IOFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ",", "\n"));
             //     file.close();
             // }
-
-            //display with opencv
-            cv::Mat context_image(latest_context.rows(), latest_context.cols(), CV_64F, const_cast<double*>(latest_context.data()));
-            cv::normalize(context_image, context_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-            cv::Mat resized_image;
-            int scale_factor = 10; // Increase this for larger size
-            cv::resize(context_image, resized_image, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
-            // Display the resized image
-            cv::imshow("Scan Context", resized_image);
-            cv::waitKey(0);
+            // //DEBUG display scan context as image using opencv
+            // cv::Mat context_image(latest_context.rows(), latest_context.cols(), CV_64F, const_cast<double*>(latest_context.data()));
+            // cv::normalize(context_image, context_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+            // cv::Mat resized_image;
+            // int scale_factor = 10; // Increase this for larger size
+            // cv::resize(context_image, resized_image, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
+            // // Display the resized image
+            // cv::imshow("Scan Context", resized_image);
+            // cv::waitKey(0);
         }
 
     }
@@ -219,6 +207,8 @@ private:
     int frames_since_last_kf = 0;
     float dist_since_last_kf = 0.;
     Eigen::VectorXf pose_at_last_kf;
+    Eigen::Quaternionf quat_at_last_kf;
+    Eigen::Quaternionf rot_eigen;
     Eigen::MatrixXf prev_pcl_matrix;
 
     geometry_msgs::Vector3 trans_ = {};   // for translation (x, y, z)
