@@ -24,43 +24,6 @@
 using namespace std;
 using namespace Eigen;
 
-// struct Keyframe {
-//     int id; // Unique keyframe ID
-//     pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud; // Point cloud for the keyframe
-//     ros::Time timestamp; // Time of the keyframe
-// };
-
-// class KeyframeManager {
-// public:
-//     void addKeyframe(int id, const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const ros::Time& timestamp) {
-//         Keyframe kf;
-//         kf.id = id;
-//         kf.point_cloud = cloud;
-//         kf.timestamp = timestamp;
-//         keyframes_[id] = kf;
-//     }
-
-//     std::shared_ptr<Keyframe> getKeyframe(int id) {
-//         if (keyframes_.find(id) != keyframes_.end()) {
-//             return std::make_shared<Keyframe>(keyframes_[id]);
-//         }
-//         return nullptr;
-//     }
-
-//     const std::unordered_map<int, Keyframe>& getAllKeyframes() const {
-//         return keyframes_;
-//     }
-
-//     void removeKeyframe(int id) {
-//         keyframes_.erase(id);
-//     }
-
-// private:
-//     std::unordered_map<int, Keyframe> keyframes_;
-// };
-
-
-
 class PoseGraphNode {
 public:
     PoseGraphNode(ros::NodeHandle& nh){
@@ -69,15 +32,24 @@ public:
         get_these_clouds_sub_ = nh.subscribe("/get_these_clouds", 10, &PoseGraphNode::getTheseCloudsCallback, this);
 
         ros::Rate rate(10);
+        initializePoseCSV("pose_data.csv");
 
     }
 
     void keyframeDataCallback(const woodhouse::KeyframeData::ConstPtr& msg) {
         // // Print the scan_index from the received message
-        // ROS_INFO("Received keyframe with scan_index: %d", msg->scan_index);
+        ROS_INFO("Received keyframe with scan_index: %d", msg->scan_index);
+        cout << msg->odom_constraint << endl;
 
-        // Optionally, if you want to also print out the point cloud size (for debugging purposes)
-        ROS_INFO("Point cloud size: %zu", msg->point_cloud.data.size());
+
+        //For debug with Jupyter Notebook:
+        // save point cloud to .csv file, titled with keyframe index
+        string fn = "keyframe_" + to_string(msg->scan_index) + ".csv";
+        savePointCloudToCSV(msg->point_cloud, fn);
+
+        // save odom constraints to text file
+        appendPoseToCSV("pose_data.csv", msg->scan_index, msg->odom_constraint);
+
     }
 
     void getTheseCloudsCallback(const woodhouse::GetTheseClouds::ConstPtr& msg) {
@@ -85,6 +57,26 @@ public:
         std::cout << "Need to find the clouds for indices:" << msg->scan1_index << " and " << msg->scan2_index << std::endl;
     }
 
+
+    void savePointCloudToCSV(const sensor_msgs::PointCloud2& cloud_msg, const std::string& filename) {
+        // Convert sensor_msgs/PointCloud2 to pcl::PointCloud<pcl::PointXYZ>
+        pcl::PointCloud<pcl::PointXYZ> cloud;
+        pcl::fromROSMsg(cloud_msg, cloud);
+
+        // Open the output CSV file
+        std::ofstream csv_file(filename);
+        if (!csv_file.is_open()) {
+            ROS_ERROR("Failed to open file: %s", filename.c_str());
+            return;
+        }
+
+        for (const auto& point : cloud.points) {
+            csv_file << point.x << "," << point.y << "," << point.z << "\n";
+        }
+
+        csv_file.close();
+        ROS_INFO("PointCloud saved to: %s", filename.c_str());
+    }
 
 private:
     // KeyframeManager keyframe_manager;
@@ -118,6 +110,41 @@ private:
 
         return rosPointCloud;
     }
+
+    void initializePoseCSV(const std::string& filename) {
+        // Open the CSV file in write mode and add a header
+        std::ofstream csv_file(filename, std::ios::out);
+        if (!csv_file.is_open()) {
+            ROS_ERROR("Failed to initialize pose CSV file: %s", filename.c_str());
+            return;
+        }
+
+        csv_file << "scan_index,position_x,position_y,position_z,orientation_x,orientation_y,orientation_z,orientation_w\n";
+        csv_file.close();
+        ROS_INFO("Initialized pose CSV file: %s", filename.c_str());
+    }
+
+    void appendPoseToCSV(const std::string& filename, int scan_index, const geometry_msgs::Pose& pose) {
+        // Open the CSV file in append mode
+        std::ofstream csv_file(filename, std::ios::app);
+        if (!csv_file.is_open()) {
+            ROS_ERROR("Failed to open pose CSV file for appending: %s", filename.c_str());
+            return;
+        }
+
+        // Append the scan index and pose information
+        csv_file << scan_index << ","
+                 << pose.position.x << "," << pose.position.y << "," << pose.position.z << ","
+                 << pose.orientation.x << "," << pose.orientation.y << "," 
+                 << pose.orientation.z << "," << pose.orientation.w << "\n";
+
+        csv_file.close();
+        ROS_INFO("Appended pose to CSV: scan_index = %d", scan_index);
+    }
+
+
+
+
 };
 
 int main(int argc, char** argv) {

@@ -56,49 +56,26 @@ Run node to convert button output to twist message
 
 # TODO
 
-#### General
-* [X] Set up laptop for control
-* [X] Set up repo
+#### Platform
 
-#### Basic motion
-
-* [X] Convert controller input to twist msg
-* [X] Convert twist to odrive command
-* [X] Fine tune motor gains
-* [X] Tune turning radius
 * [ ] publish battery status
 
 #### Mapping and Localization
 
 * [X] run ICET odometry
-* [X] Create keyframe grabber node (simple python)
-* [X] Make roscpp node for loop closure canidatres with scan context
 * [X] Explore message passing for scan context features--> Custom keyframe msg type, service, or local storage
-* [X] Make overview figure  
-* [X] Make keyframe_data custom msg
-* [X] Detect loop closure canidates
-* [ ] loop closer node
+* [ ] Detect loop closure canidates
 * [ ] topic vs service for fetching clouds from idx for loop closer node
-* [ ] Check for loop closure -- get initial pose estimate
-* [ ] Run ICET again to obtain loop closure constraints
-* [ ] compile gtsam
-* [ ] make factor graph node
+* [ ] Save keyframe point clouds and associated odometry constraints to exteral file
+* [ ] compile gtsam with python binds
+* [ ] make jupyter notebook to debug odometry constraints output by scan context node
+* [ ] Create loop closer node to run ICET again to obtain loop closure constraints
+
 
 #### Hardware
 
-* [X] Order 80/20
-* [X] Spec dampers
-* [X] Get 8bitdo controller talking
+* Get 8bitdo controller talking with follwing commands:
  
  ```sudo nano /etc/udev/rules.d/99-8bitdo-xinput.rules ```
 
    ```ACTION=="add", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="3106", RUN+="/sbin/modprobe xpad", RUN+="/bin/sh -c 'echo 2dc8 3106 > /sys/bus/usb/drivers/xpad/new_id'"```
-
-* [X] Laptop mount
-* [X] Tune damper tension for platform weight
-* [X] Replace PSU with LIPOs
-* [X] Add shrinkwrapped CAD to repo
-* [X] CAD electronics enclosure for odrive + cpu + batteries
-* [X] CAD + print + install undercarriage assembly
-* [X] attach LiDAR sensor
-* [X] redesign rear swingarms to provide adequate tension when driving in reverse 

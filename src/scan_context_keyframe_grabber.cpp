@@ -140,6 +140,9 @@ public:
             rot_eigen.normalize();
             quat_at_last_kf.normalize();
             Eigen::Quaternionf q_relative = rot_eigen * quat_at_last_kf.inverse();
+
+            //TODO -- these xyz positions are relative to WORLD coordinate system 
+            // we need to bring them into the frame of the previous scan to use in pose graph optimization...
             keyframe_msg.odom_constraint.position.x = (trans_.x - pose_at_last_kf[0]);
             keyframe_msg.odom_constraint.position.y = (trans_.y - pose_at_last_kf[1]);
             keyframe_msg.odom_constraint.position.z = (trans_.z - pose_at_last_kf[2]);
