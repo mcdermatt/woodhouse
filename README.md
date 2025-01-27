@@ -62,6 +62,7 @@ Run node to convert button output to twist message
 
 #### Mapping and Localization
 
+* [ ] Fix reflections off back of laptop! 
 * [X] run ICET odometry
 * [X] Explore message passing for scan context features--> Custom keyframe msg type, service, or local storage
 * [ ] Detect loop closure canidates

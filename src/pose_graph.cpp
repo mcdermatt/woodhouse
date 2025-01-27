@@ -41,7 +41,6 @@ public:
         ROS_INFO("Received keyframe with scan_index: %d", msg->scan_index);
         cout << msg->odom_constraint << endl;
 
-
         //For debug with Jupyter Notebook:
         // save point cloud to .csv file, titled with keyframe index
         string fn = "keyframe_" + to_string(msg->scan_index) + ".csv";

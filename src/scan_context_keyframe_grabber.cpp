@@ -140,12 +140,18 @@ public:
             rot_eigen.normalize();
             quat_at_last_kf.normalize();
             Eigen::Quaternionf q_relative = rot_eigen * quat_at_last_kf.inverse();
+            q_relative.normalize();
 
-            //TODO -- these xyz positions are relative to WORLD coordinate system 
-            // we need to bring them into the frame of the previous scan to use in pose graph optimization...
-            keyframe_msg.odom_constraint.position.x = (trans_.x - pose_at_last_kf[0]);
-            keyframe_msg.odom_constraint.position.y = (trans_.y - pose_at_last_kf[1]);
-            keyframe_msg.odom_constraint.position.z = (trans_.z - pose_at_last_kf[2]);
+            //bring translation of platform since last keyframe in body frame coordinate system
+            auto dx_world = (trans_.x - pose_at_last_kf[0]);
+            auto dy_world = (trans_.y - pose_at_last_kf[1]);
+            auto dz_world = (trans_.z - pose_at_last_kf[2]);
+            Eigen::Vector3f delta_world(dx_world, dy_world, dz_world);
+            Eigen::Vector3f delta_body_frame = q_relative * delta_world;
+            keyframe_msg.odom_constraint.position.x = delta_body_frame[0];
+            keyframe_msg.odom_constraint.position.y = delta_body_frame[1];
+            keyframe_msg.odom_constraint.position.z = delta_body_frame[2];
+
             keyframe_msg.odom_constraint.orientation.x = q_relative.x();
             keyframe_msg.odom_constraint.orientation.y = q_relative.y();
             keyframe_msg.odom_constraint.orientation.z = q_relative.z();
@@ -191,8 +197,8 @@ public:
     Eigen::VectorXf X0;
 
 private:
-    const float dist_thresh = 1.;
-    const int frame_thresh = 10;
+    const float dist_thresh = 0.1;
+    const int frame_thresh = 5;
 
     ros::NodeHandle nh_;
     tf2_ros::Buffer tfBuffer_;
