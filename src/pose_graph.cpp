@@ -20,9 +20,20 @@
 #include <cmath>
 #include "woodhouse/KeyframeData.h"
 #include "woodhouse/GetTheseClouds.h"
+#include "woodhouse/HereAreTheClouds.h"
+#include <map>
 
 using namespace std;
 using namespace Eigen;
+
+struct Keyframe {
+    int scan_index;                          // Index of the scan
+    int last_scan_index;                     // Last keyframe index for relative odometry constraint
+    sensor_msgs::PointCloud2 point_cloud;    // Point cloud of the keyframe
+    std::vector<float> scan_context;         // Scan context feature vector
+    std::vector<float> ring_keys;            // Ring key feature vector
+    geometry_msgs::Pose odom_constraint;     // Odometry estimate
+};
 
 class PoseGraphNode {
 public:
@@ -30,30 +41,50 @@ public:
         // Set up ROS subscribers and publishers
         keyframe_sub_ = nh.subscribe("/keyframe_data", 10, &PoseGraphNode::keyframeDataCallback, this);
         get_these_clouds_sub_ = nh.subscribe("/get_these_clouds", 10, &PoseGraphNode::getTheseCloudsCallback, this);
+        here_are_the_clouds_pub_ =  nh.advertise<woodhouse::HereAreTheClouds>("/here_are_the_clouds", 10);
 
         ros::Rate rate(10);
         initializePoseCSV("pose_data.csv");
 
     }
 
+    map<int, Keyframe> frames_;
+
     void keyframeDataCallback(const woodhouse::KeyframeData::ConstPtr& msg) {
         // // Print the scan_index from the received message
         ROS_INFO("Received keyframe with scan_index: %d", msg->scan_index);
         cout << msg->odom_constraint << endl;
 
-        //For debug with Jupyter Notebook:
-        // save point cloud to .csv file, titled with keyframe index
-        string fn = "keyframe_" + to_string(msg->scan_index) + ".csv";
-        savePointCloudToCSV(msg->point_cloud, fn);
+        //add new frame to internal map
+        if (frames_.find(msg->scan_index) == frames_.end()){
+            Keyframe frame_i;
+            frame_i.last_scan_index=msg -> last_scan_index;
+            frame_i.point_cloud = msg->point_cloud;
+            frames_[msg->scan_index] = frame_i;
+            cout << "holding on to frame" << msg->scan_index << "in pose graph node" << endl;
+        }        
 
-        // save odom constraints to text file
-        appendPoseToCSV("pose_data.csv", msg->scan_index, msg->odom_constraint);
+        // //For debug with Jupyter Notebook: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // // save point cloud to .csv file, titled with keyframe index
+        // string fn = "keyframe_" + to_string(msg->scan_index) + ".csv";
+        // savePointCloudToCSV(msg->point_cloud, fn);
+
+        // // save odom constraints to text file
+        // appendPoseToCSV("pose_data.csv", msg->scan_index, msg->odom_constraint);
+        // // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     }
 
     void getTheseCloudsCallback(const woodhouse::GetTheseClouds::ConstPtr& msg) {
         // Print the scan_index from the received message
         std::cout << "Need to find the clouds for indices:" << msg->scan1_index << " and " << msg->scan2_index << std::endl;
+
+        woodhouse::HereAreTheClouds here_are_the_clouds_msg;
+        here_are_the_clouds_msg.scan1_index = msg->scan1_index;
+        here_are_the_clouds_msg.scan2_index = msg->scan2_index;
+        here_are_the_clouds_msg.point_cloud1 = frames_[msg->scan1_index].point_cloud;
+        here_are_the_clouds_msg.point_cloud2 = frames_[msg->scan2_index].point_cloud;
+        here_are_the_clouds_pub_.publish(here_are_the_clouds_msg);
     }
 
 
@@ -82,6 +113,7 @@ private:
 
     ros::Subscriber keyframe_sub_;
     ros::Subscriber get_these_clouds_sub_;
+    ros::Publisher here_are_the_clouds_pub_;
 
     Eigen::MatrixXf convertPCLtoEigen(const pcl::PointCloud<pcl::PointXYZ>::Ptr& pcl_cloud) {
         Eigen::MatrixXf eigen_matrix(pcl_cloud->size(), 3);

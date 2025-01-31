@@ -58,6 +58,7 @@ add_message_files(
   FILES
   KeyframeData.msg
   GetTheseClouds.msg
+  HereAreTheClouds.msg
 )
 
 ## Generate services in the 'srv' folder
