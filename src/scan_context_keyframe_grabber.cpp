@@ -34,7 +34,7 @@ public:
         keyframe_data_pub_ =  nh_.advertise<woodhouse::KeyframeData>("/keyframe_data", 10);
         get_these_clouds_pub_ =  nh_.advertise<woodhouse::GetTheseClouds>("/get_these_clouds", 10);
 
-        ros::Rate rate(10);
+        ros::Rate rate(50);
         pose_at_last_kf.resize(3);
         pose_at_last_kf << 0., 0., 0.;
         rot_.w = 1.0; //needed for quat initialization
@@ -89,13 +89,13 @@ public:
             ROS_ERROR("Transform error: %s", ex.what());
         }
         frames_since_last_kf++;
-        // cout<< frames_since_last_kf << " " << pose_at_last_kf << endl;        
+        cout<< frames_since_last_kf << endl;        
 
         dist_since_last_kf = sqrt(pow(pose_at_last_kf[0] - trans_.x, 2) 
                                 + pow(pose_at_last_kf[1] - trans_.y, 2) 
                                 + pow(pose_at_last_kf[2] - trans_.z, 2));
 
-        // std::cout << "dist since last kf " << dist_since_last_kf << endl;
+        std::cout << "dist since last kf " << dist_since_last_kf << endl;
 
         // Conditions to make a new keyframe
         if (dist_since_last_kf > dist_thresh && frames_since_last_kf > frame_thresh){
@@ -197,8 +197,8 @@ public:
     Eigen::VectorXf X0;
 
 private:
-    const float dist_thresh = 0.1;
-    const int frame_thresh = 5;
+    const float dist_thresh = 0.3;
+    const int frame_thresh = 10;
 
     ros::NodeHandle nh_;
     tf2_ros::Buffer tfBuffer_;

@@ -43,7 +43,7 @@ public:
         get_these_clouds_sub_ = nh.subscribe("/get_these_clouds", 10, &PoseGraphNode::getTheseCloudsCallback, this);
         here_are_the_clouds_pub_ =  nh.advertise<woodhouse::HereAreTheClouds>("/here_are_the_clouds", 10);
 
-        ros::Rate rate(10);
+        ros::Rate rate(50);
         initializePoseCSV("pose_data.csv");
 
     }
@@ -77,7 +77,7 @@ public:
 
     void getTheseCloudsCallback(const woodhouse::GetTheseClouds::ConstPtr& msg) {
         // Print the scan_index from the received message
-        std::cout << "Need to find the clouds for indices:" << msg->scan1_index << " and " << msg->scan2_index << std::endl;
+        std::cout << "Poese_graph_node: publishing clouds for indices:" << msg->scan1_index << " and " << msg->scan2_index << std::endl;
 
         woodhouse::HereAreTheClouds here_are_the_clouds_msg;
         here_are_the_clouds_msg.scan1_index = msg->scan1_index;
