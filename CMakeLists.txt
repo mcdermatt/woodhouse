@@ -4,6 +4,9 @@ project(woodhouse)
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
+# Add this line to define the alignment for Eigen
+add_definitions(-DEIGEN_ALIGN_16)
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -20,6 +23,9 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(OpenCV REQUIRED)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -57,9 +63,15 @@ generate_messages(
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES woodhouse
- CATKIN_DEPENDS geometry_msgs pcl_ros roscpp rospy sensor_msgs std_msgs message_runtime
-#  DEPENDS system_lib
+ CATKIN_DEPENDS geometry_msgs pcl_ros roscpp rospy sensor_msgs std_msgs message_runtime icet
+ DEPENDS system_lib
 )
+
+# Set optimization flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -march=native")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -fno-tree-vectorize -fno-inline") #Test for debugging-- way too slow
+
 
 ###########
 ## Build ##

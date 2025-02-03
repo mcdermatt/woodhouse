@@ -34,7 +34,6 @@ using namespace Eigen;
 
 //TODO-- should we also include an initial estimate to seed these transforms?
 
-
 class LoopCloserNode {
 public:
     LoopCloserNode(ros::NodeHandle& nh){
@@ -46,51 +45,54 @@ public:
     }
 
     void hereAreTheCloudsCallback(const woodhouse::HereAreTheClouds::ConstPtr& msg) {
+
         // Print the scan_index from the received message
         std::cout << "loop_closer_node: registering PC's: " << msg->scan1_index << " and " << msg->scan2_index << std::endl;
 
-        //extract point clouds
-        // sensor_msgs::PointCloud2 pcl_cloud1 = msg->point_cloud1;
-        // sensor_msgs::PointCloud2 pcl_cloud2 = msg->point_cloud2;
-
-        // extract point clouds to and convert PointCloud2 to PCL PointCloud
+        // extract point clouds and convert PointCloud2 to PCL PointCloud
         boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ>> pcl_cloud1(new pcl::PointCloud<pcl::PointXYZ>());
         pcl::fromROSMsg(msg->point_cloud1, *pcl_cloud1);
         boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ>> pcl_cloud2(new pcl::PointCloud<pcl::PointXYZ>());
         pcl::fromROSMsg(msg->point_cloud2, *pcl_cloud2);
 
-
         //convert PCL to eigen matrix
         Eigen::MatrixXf pc1_matrix = convertPCLtoEigen(pcl_cloud1);
         Eigen::MatrixXf pc2_matrix = convertPCLtoEigen(pcl_cloud2);
 
-        // // Filter out points less than distance 'd' from the origin
-        // float minD = 0.2;
-        // vector<int> not_too_close_idxs1;
-        // for (int i = 0; i < pc1_matrix.rows(); i++){
-        //     float distance = pc1_matrix.row(i).norm();
-        //     if (distance > minD){
-        //         not_too_close_idxs1.push_back(i);
-        //     }
-        // }
-        // Eigen::MatrixXf filtered_pcl_matrix1(not_too_close_idxs1.size(), 3);
-        // for (std::size_t i = 0; i < not_too_close_idxs1.size(); i++){
-        //     filtered_pcl_matrix1.row(i) = pc1_matrix.row(not_too_close_idxs1[i]);
-        // }
-        // vector<int> not_too_close_idxs2;
-        // for (int i = 0; i < pc2_matrix.rows(); i++){
-        //     float distance = pc2_matrix.row(i).norm();
-        //     if (distance > minD){
-        //         not_too_close_idxs2.push_back(i);
-        //     }
-        // }
-        // Eigen::MatrixXf filtered_pcl_matrix2(not_too_close_idxs2.size(), 3);
-        // for (std::size_t i = 0; i < not_too_close_idxs2.size(); i++){
-        //     filtered_pcl_matrix2.row(i) = pc2_matrix.row(not_too_close_idxs2[i]);
-        // }
-        // pc1_matrix = filtered_pcl_matrix1;
-        // pc2_matrix = filtered_pcl_matrix2;
+        // Filter out points less than distance 'd' from the origin
+        float minD = 0.2;
+        vector<int> not_too_close_idxs1;
+        for (int i = 0; i < pc1_matrix.rows(); i++){
+            float distance = pc1_matrix.row(i).norm();
+            if (distance > minD){
+                not_too_close_idxs1.push_back(i);
+            }
+        }
+        Eigen::MatrixXf filtered_pcl_matrix1(not_too_close_idxs1.size(), 3);
+        for (std::size_t i = 0; i < not_too_close_idxs1.size(); i++){
+            filtered_pcl_matrix1.row(i) = pc1_matrix.row(not_too_close_idxs1[i]);
+        }
+        vector<int> not_too_close_idxs2;
+        for (int i = 0; i < pc2_matrix.rows(); i++){
+            float distance = pc2_matrix.row(i).norm();
+            if (distance > minD){
+                not_too_close_idxs2.push_back(i);
+            }
+        }
+        Eigen::MatrixXf filtered_pcl_matrix2(not_too_close_idxs2.size(), 3);
+        for (std::size_t i = 0; i < not_too_close_idxs2.size(); i++){
+            filtered_pcl_matrix2.row(i) = pc2_matrix.row(not_too_close_idxs2[i]);
+        }
+        pc1_matrix = filtered_pcl_matrix1;
+        pc2_matrix = filtered_pcl_matrix2;
 
+        //temporary fix
+        if (pc1_matrix.hasNaN() == true || pc2_matrix.hasNaN() == true){
+            cout << "found a NaN" << endl;
+            return;
+            // pc1_matrix = removeNaNRows(pc1_matrix);
+            // pc2_matrix = removeNaNRows(pc2_matrix);
+        }
 
         cout << "1: " << pc1_matrix.size() << " 2: " << pc2_matrix.size() << endl;
 
@@ -100,19 +102,18 @@ public:
             int numBinsPhi = 24;
             int numBinsTheta = 75; 
             //seed initial estimate -- TODO-- update msg to add seed TF
-            Eigen::VectorXf X0;
+            Eigen::VectorXf X0(6);
             X0 << 0., 0., 0., 0., 0., 0.; 
             // X0 << X[0], X[1], X[2], X[3], X[4], X[5]; 
             ICET it(pc1_matrix, pc2_matrix, run_length, X0, numBinsPhi, numBinsTheta);
             Eigen::VectorXf X = it.X;
             cout << "soln: " << endl << X << endl;
-            cout << "1-sigma error bounds:" << endl << it.pred_stds << endl;
             //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-            std::cout << pc1_matrix.block(0, 0, 10, 3) << std::endl;
-            std::cout << pc2_matrix.block(0, 0, 10, 3) << std::endl;
+            // std::cout << pc1_matrix.block(0, 0, 10, 3) << std::endl;
+            // std::cout << pc2_matrix.block(0, 0, 10, 3) << std::endl;
 
-            //send resulting constraint as msg to pose graph node
+            //TODO: send resulting constraint as msg to pose graph node
         }        
 
     }
@@ -125,6 +126,25 @@ public:
         return eigen_matrix;
     }
 
+    Eigen::MatrixXf removeNaNRows(const Eigen::MatrixXf& input) {
+        std::vector<int> validIndices;
+
+        // Collect indices of rows that do NOT contain NaNs
+        for (int i = 0; i < input.rows(); ++i) {
+            if (!input.row(i).hasNaN()) {
+                validIndices.push_back(i);
+            }
+        }
+
+        // Create a new matrix with only valid rows
+        Eigen::MatrixXf filtered(validIndices.size(), input.cols());
+        for (size_t i = 0; i < validIndices.size(); ++i) {
+            filtered.row(i) = input.row(validIndices[i]);
+        }
+
+        return filtered;
+    }
+
 
 private:
     ros::Subscriber here_are_the_clouds_sub_;
@@ -133,7 +153,8 @@ private:
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "loop_closer_node");
+    // ros::init(argc, argv, "loop_closer_node");
+    ros::init(argc, argv, "loop_closer_node", ros::init_options::AnonymousName); //for debug-- allow creation of multiple of this node
     ros::NodeHandle nh;
     LoopCloserNode lc_node(nh);
     ros::spin();
