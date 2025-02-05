@@ -160,12 +160,21 @@ public:
             keyframe_msg.ring_keys = flattened_keyring;
             keyframe_data_pub_.publish(keyframe_msg);
 
-            //create message to tell pose graph node to grab these scans (only if valid match)
-            if (loop_id > -1){
-                woodhouse::GetTheseClouds get_clouds_msg;
-                get_clouds_msg.scan1_index = keyframeCount;
-                get_clouds_msg.scan2_index = loop_id;
-                get_these_clouds_pub_.publish(get_clouds_msg);
+            // //create message to tell pose graph node to grab these scans (only if valid match)
+            // if (loop_id > -1){
+            //     woodhouse::GetTheseClouds get_clouds_msg;
+            //     get_clouds_msg.scan1_index = keyframeCount;
+            //     get_clouds_msg.scan2_index = loop_id;
+            //     get_these_clouds_pub_.publish(get_clouds_msg);
+            // }
+
+            //tell pose graph node to grab every subsequent keyframe for registration
+            //starting one behind to give pose graph node time to catch up
+            if (keyframeCount > 1){
+                woodhouse::GetTheseClouds get_neighbor_clouds_msg;
+                get_neighbor_clouds_msg.scan1_index = keyframeCount-2;
+                get_neighbor_clouds_msg.scan2_index = keyframeCount-1;
+                get_these_clouds_pub_.publish(get_neighbor_clouds_msg);
             }
 
             pose_at_last_kf[0] = static_cast<float>(trans_.x);
@@ -175,7 +184,7 @@ public:
             frames_since_last_kf = 0;
             keyframeCount++;
 
-            // //DEBUG save csv
+            // //DEBUG save csv of scan context
             // std::ofstream file("latest_scan_context.csv");
             // if (file.is_open()) {
             //     file << latest_context.format(Eigen::IOFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ",", "\n"));

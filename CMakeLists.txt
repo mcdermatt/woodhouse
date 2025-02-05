@@ -37,6 +37,7 @@ add_message_files(
   KeyframeData.msg
   GetTheseClouds.msg
   HereAreTheClouds.msg
+  LoopClosed.msg
 )
 
 ## Generate added messages and services with any dependencies listed here

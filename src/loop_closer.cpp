@@ -7,6 +7,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>  // Add this line for tf2_ros::Buffer
+#include <tf2/LinearMath/Quaternion.h>
 #include <pcl/registration/icp.h>
 #include <Eigen/Dense>
 #include <random>
@@ -21,6 +22,7 @@
 #include "woodhouse/KeyframeData.h"
 #include "woodhouse/GetTheseClouds.h"
 #include "woodhouse/HereAreTheClouds.h"
+#include "woodhouse/LoopClosed.h"
 #include <map>
 #include "icet.h"
 #include "utils.h"
@@ -32,13 +34,15 @@ using namespace Eigen;
 
 // publishes a 6DOF transform relatinig the two provided point clouds to one another 
 
-//TODO-- should we also include an initial estimate to seed these transforms?
+// TODO-- should we also include an initial estimate to seed these transforms?
+// TODO-- add flag for ICET solution digerging--- don't add LC constraint to graph if so   
 
 class LoopCloserNode {
 public:
     LoopCloserNode(ros::NodeHandle& nh){
         // Set up ROS subscribers and publishers
         here_are_the_clouds_sub_ = nh.subscribe("/here_are_the_clouds", 10, &LoopCloserNode::hereAreTheCloudsCallback, this);
+        loop_closure_constraint_pub_ =  nh.advertise<woodhouse::LoopClosed>("/loop_closure_constraint", 10);
 
         ros::Rate rate(50);
 
@@ -109,12 +113,22 @@ public:
             Eigen::VectorXf X = it.X;
             cout << "soln: " << endl << X << endl;
             //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-            // std::cout << pc1_matrix.block(0, 0, 10, 3) << std::endl;
-            // std::cout << pc2_matrix.block(0, 0, 10, 3) << std::endl;
-
-            //TODO: send resulting constraint as msg to pose graph node
+            //publish as loop closure msg (need to send back to pose graph node)
+            woodhouse::LoopClosed loop_closure_msg;
+            loop_closure_msg.scan1_index = msg->scan1_index;
+            loop_closure_msg.scan2_index = msg->scan2_index;
+            loop_closure_msg.loop_closure_constraint.position.x = X[0];
+            loop_closure_msg.loop_closure_constraint.position.y = X[1];
+            loop_closure_msg.loop_closure_constraint.position.z = X[2];
+            tf2::Quaternion q;
+            q.setRPY(X[3],X[4],X[5]);
+            loop_closure_msg.loop_closure_constraint.orientation.x = q.x();
+            loop_closure_msg.loop_closure_constraint.orientation.y = q.y();
+            loop_closure_msg.loop_closure_constraint.orientation.z = q.z();
+            loop_closure_msg.loop_closure_constraint.orientation.w = q.w();
+            loop_closure_constraint_pub_.publish(loop_closure_msg);
         }        
+
 
     }
 
@@ -148,13 +162,12 @@ public:
 
 private:
     ros::Subscriber here_are_the_clouds_sub_;
-    // ros::Publisher here_are_the_clouds_pub_;
-
+    ros::Publisher loop_closure_constraint_pub_;
 };
 
 int main(int argc, char** argv) {
-    // ros::init(argc, argv, "loop_closer_node");
-    ros::init(argc, argv, "loop_closer_node", ros::init_options::AnonymousName); //for debug-- allow creation of multiple of this node
+    ros::init(argc, argv, "loop_closer_node");
+    // ros::init(argc, argv, "loop_closer_node", ros::init_options::AnonymousName); //for debug-- allow creation of multiple of this node
     ros::NodeHandle nh;
     LoopCloserNode lc_node(nh);
     ros::spin();

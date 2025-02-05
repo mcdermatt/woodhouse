@@ -21,6 +21,7 @@
 #include "woodhouse/KeyframeData.h"
 #include "woodhouse/GetTheseClouds.h"
 #include "woodhouse/HereAreTheClouds.h"
+#include "woodhouse/LoopClosed.h"
 #include <map>
 
 using namespace std;
@@ -41,6 +42,7 @@ public:
         // Set up ROS subscribers and publishers
         keyframe_sub_ = nh.subscribe("/keyframe_data", 10, &PoseGraphNode::keyframeDataCallback, this);
         get_these_clouds_sub_ = nh.subscribe("/get_these_clouds", 10, &PoseGraphNode::getTheseCloudsCallback, this);
+        loop_closure_sub_ = nh.subscribe("/loop_closure_constraint", 10, &PoseGraphNode::loopClosureCallback, this);
         here_are_the_clouds_pub_ =  nh.advertise<woodhouse::HereAreTheClouds>("/here_are_the_clouds", 10);
 
         ros::Rate rate(50);
@@ -64,20 +66,31 @@ public:
             cout << "holding on to frame" << msg->scan_index << "in pose graph node" << endl;
         }        
 
-        // //For debug with Jupyter Notebook: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // // save point cloud to .csv file, titled with keyframe index
-        // string fn = "keyframe_" + to_string(msg->scan_index) + ".csv";
-        // savePointCloudToCSV(msg->point_cloud, fn);
+        //For debug with Jupyter Notebook: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // save point cloud to .csv file, titled with keyframe index
+        string fn = "keyframe_" + to_string(msg->scan_index) + ".csv";
+        savePointCloudToCSV(msg->point_cloud, fn);
 
-        // // save odom constraints to text file
-        // appendPoseToCSV("pose_data.csv", msg->scan_index, msg->odom_constraint);
+        // save odom constraints to text file
+        appendPoseToCSV("pose_data.csv", msg->last_scan_index, msg->scan_index, msg->odom_constraint);
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    }
+
+    void loopClosureCallback(const woodhouse::LoopClosed::ConstPtr& msg) {
+        cout << "Received loop closure constraint between: " << msg->scan1_index << " and " << msg->scan2_index << endl;
+        cout << msg->loop_closure_constraint << endl;
+
+        // //For debug with Jupyter Notebook: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // // save loop closure constraint to text file
+        // appendPoseToCSV("pose_data.csv", msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
         // // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     }
 
     void getTheseCloudsCallback(const woodhouse::GetTheseClouds::ConstPtr& msg) {
         // Print the scan_index from the received message
-        std::cout << "Poese_graph_node: publishing clouds for indices:" << msg->scan1_index << " and " << msg->scan2_index << std::endl;
+        std::cout << "Pose_graph_node: publishing clouds for indices:" << msg->scan1_index << " and " << msg->scan2_index << std::endl;
 
         woodhouse::HereAreTheClouds here_are_the_clouds_msg;
         here_are_the_clouds_msg.scan1_index = msg->scan1_index;
@@ -109,10 +122,9 @@ public:
     }
 
 private:
-    // KeyframeManager keyframe_manager;
-
     ros::Subscriber keyframe_sub_;
     ros::Subscriber get_these_clouds_sub_;
+    ros::Subscriber loop_closure_sub_;
     ros::Publisher here_are_the_clouds_pub_;
 
     Eigen::MatrixXf convertPCLtoEigen(const pcl::PointCloud<pcl::PointXYZ>::Ptr& pcl_cloud) {
@@ -150,12 +162,12 @@ private:
             return;
         }
 
-        csv_file << "scan_index,position_x,position_y,position_z,orientation_x,orientation_y,orientation_z,orientation_w\n";
+        csv_file << "scan1_index,scan2_index,position_x,position_y,position_z,orientation_x,orientation_y,orientation_z,orientation_w\n";
         csv_file.close();
         ROS_INFO("Initialized pose CSV file: %s", filename.c_str());
     }
 
-    void appendPoseToCSV(const std::string& filename, int scan_index, const geometry_msgs::Pose& pose) {
+    void appendPoseToCSV(const std::string& filename, int scan1_index, int scan2_index, const geometry_msgs::Pose& pose) {
         // Open the CSV file in append mode
         std::ofstream csv_file(filename, std::ios::app);
         if (!csv_file.is_open()) {
@@ -164,13 +176,13 @@ private:
         }
 
         // Append the scan index and pose information
-        csv_file << scan_index << ","
+        csv_file << scan1_index << "," << scan2_index << ","
                  << pose.position.x << "," << pose.position.y << "," << pose.position.z << ","
                  << pose.orientation.x << "," << pose.orientation.y << "," 
                  << pose.orientation.z << "," << pose.orientation.w << "\n";
 
         csv_file.close();
-        ROS_INFO("Appended pose to CSV: scan_index = %d", scan_index);
+        ROS_INFO("Appended pose to CSV: scan_index = %d", scan1_index);
     }
 
 
