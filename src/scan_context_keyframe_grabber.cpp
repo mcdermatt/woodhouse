@@ -111,12 +111,25 @@ public:
             Eigen::VectorXd latest_context_flat = Eigen::Map<Eigen::VectorXd>(latest_context.data(), latest_context.size());
 
             int loop_id = -1;
-            if (keyframeCount > 0){
-                std::pair<int, float> result = sc_manager_.detectLoopClosureID();
-                loop_id = result.first;
-                float yaw_diff_in_rad = result.second;
-                std::cout << "loop_id:" << loop_id << std::endl;
+            float yaw_diff_in_rad;
+            // if (keyframeCount > 0){
+            //     std::pair<int, float> result = sc_manager_.detectLoopClosureID();
+            //     loop_id = result.first;
+            //     float yaw_diff_in_rad = result.second;
+            //     std::cout << "loop_id:" << loop_id << std::endl;
+            // }
+
+            if (keyframeCount > 0) {
+                std::tuple<int, float, float> result = sc_manager_.detectLoopClosureID();
+                loop_id = std::get<0>(result);
+                yaw_diff_in_rad = std::get<1>(result);
+                float min_dist = std::get<2>(result);
+
+                std::cout << "loop_id: " << loop_id << std::endl;
+                std::cout << "yaw_diff_in_rad: " << yaw_diff_in_rad << std::endl;
+                std::cout << "min_dist: " << min_dist << std::endl;
             }
+
 
             //create keyframe data msg
             woodhouse::KeyframeData keyframe_msg;
