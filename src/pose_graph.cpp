@@ -117,7 +117,7 @@ public:
             double yaw   = atan2(R(1,0), R(0,0));
             Eigen::Vector3d rpy(roll, pitch, yaw);
 
-            cout << "seeding roll: " << rpy[2] << " pitch: " << rpy[1] << " yaw: " << rpy[0] << endl;
+            cout << "seeding roll: " << rpy[0] << " pitch: " << rpy[1] << " yaw: " << rpy[2] << endl;
 
             here_are_the_clouds_msg.X0 = vector<float>{frames_[msg->scan1_index].odom_constraint.position.x,
                                                        frames_[msg->scan1_index].odom_constraint.position.y,

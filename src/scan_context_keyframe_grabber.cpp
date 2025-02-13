@@ -97,8 +97,17 @@ public:
 
         std::cout << "dist since last kf " << dist_since_last_kf << endl;
 
+        //raise flag if we've rotated a sufficiently large amount since the last keyframe
+        double dot_product = quat_at_last_kf.dot(rot_eigen);  
+        dot_product = std::clamp(dot_product, -1.0, 1.0);  // Ensure numerical stability
+        double heading_change = 2.0 * std::acos(std::abs(dot_product));  // Ensure positive angle
+        bool turnFlag = false;
+        if (abs(heading_change) >  heading_thresh){
+            turnFlag = true;
+        }
+
         // Conditions to make a new keyframe
-        if (dist_since_last_kf > dist_thresh && frames_since_last_kf > frame_thresh){
+        if ((dist_since_last_kf > dist_thresh && frames_since_last_kf > frame_thresh) || turnFlag==true){
 
             // Compute the scan context descriptor
             sc_manager_.makeAndSaveScancontextAndKeys(*pcl_cloud_intensity);
@@ -206,8 +215,9 @@ public:
     Eigen::VectorXf X0;
 
 private:
-    const float dist_thresh = 1.0;
+    const float dist_thresh = 2.0;
     const int frame_thresh = 10;
+    const double heading_thresh = 0.4; // magnitude of heading change that triggers automatic re-keyframe (radians)
 
     ros::NodeHandle nh_;
     tf2_ros::Buffer tfBuffer_;

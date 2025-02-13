@@ -4,11 +4,13 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>  // Add this line for tf2_ros::Buffer
 #include <tf2/LinearMath/Quaternion.h>
 #include <pcl/registration/icp.h>
+#include <pcl/common/transforms.h>
 #include <Eigen/Dense>
 #include <random>
 #include <nav_msgs/Odometry.h>
@@ -64,7 +66,7 @@ public:
         Eigen::MatrixXf pc2_matrix = convertPCLtoEigen(pcl_cloud2);
 
         // Filter out points less than distance 'd' from the origin
-        float minD = 0.2;
+        float minD = 2.;
         vector<int> not_too_close_idxs1;
         for (int i = 0; i < pc1_matrix.rows(); i++){
             float distance = pc1_matrix.row(i).norm();
@@ -101,23 +103,114 @@ public:
         cout << "1: " << pc1_matrix.size() << " 2: " << pc2_matrix.size() << endl;
 
         if (pc1_matrix.size() > 1000 && pc2_matrix.size() > 1000){
-            // RUN ICET ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            int run_length = 12;
-            int numBinsPhi = 24;
-            int numBinsTheta = 65; 
-            int n = 25; //min points per voxel
-            float thresh = 0.5;  // Jump threshold for beginning and ending radial clusters
-            float buff = 0.5;    //buffer to add to inner and outer cluster range (helps attract nearby distributions)
-            //seed initial estimate
+            // // RUN ICET ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            // int run_length = 12;
+            // int numBinsPhi = 24;
+            // int numBinsTheta = 65; 
+            // int n = 25; //min points per voxel
+            // float thresh = 0.5;  // Jump threshold for beginning and ending radial clusters
+            // float buff = 0.5;    //buffer to add to inner and outer cluster range (helps attract nearby distributions)
+            // //seed initial estimate
+            // Eigen::VectorXf X0(6);
+            // // X0 << 0., 0., 0., 0., 0., 0.; 
+            // //TODO: confirm this is correct!
+            // X0 << -1*msg->X0[0], -1*msg->X0[1], -1*msg->X0[2], msg->X0[3], msg->X0[4], msg->X0[5]; 
+            // cout << "X0: " << X0 << endl;
+            // ICET it(pc1_matrix, pc2_matrix, run_length, X0, numBinsPhi, numBinsTheta, n, thresh, buff);
+            // Eigen::VectorXf X = it.X;
+            // cout << "soln: " << endl << X << endl;
+
+            //DEBUG-- RUN ICP instead ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            // Initialize ICP
+            pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+            // //use entire PC
+            // icp.setInputSource(pcl_cloud1);
+            // icp.setInputTarget(pcl_cloud2);
+            //remove points too close to origin and downsample
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_source = eigenToPCL(pc1_matrix);
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_target = eigenToPCL(pc2_matrix);
+            float voxel_size_coarse = 0.5;  // 0.5 best so far... Adjust voxel size as needed
+            float voxel_size_fine = 0.2;
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_source_coarse = downsampleCloud(cloud_source, voxel_size_coarse);
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_target_coarse = downsampleCloud(cloud_target, voxel_size_coarse);
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_source_fine = downsampleCloud(cloud_source, voxel_size_fine);
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_target_fine = downsampleCloud(cloud_target, voxel_size_fine);
+            icp.setInputSource(cloud_source_coarse);
+            icp.setInputTarget(cloud_target_coarse);
+
+            icp.setTransformationEpsilon(1e-8);     // Convergence criteria
+            icp.setEuclideanFitnessEpsilon(1e-6);
+            icp.setMaximumIterations(10);
+
+            //print out seeded initial transform (for debug)~~~~~
             Eigen::VectorXf X0(6);
-            // X0 << 0., 0., 0., 0., 0., 0.; 
-            //TODO: confirm this is correct!
             X0 << -1*msg->X0[0], -1*msg->X0[1], -1*msg->X0[2], msg->X0[3], msg->X0[4], msg->X0[5]; 
-            cout << "X0: " << X0 << endl;
-            ICET it(pc1_matrix, pc2_matrix, run_length, X0, numBinsPhi, numBinsTheta, n, thresh, buff);
-            Eigen::VectorXf X = it.X;
-            cout << "soln: " << endl << X << endl;
+            cout << "X0: " << X0.transpose() << endl;
+
+            // Convert X0 (6x1) to a 4x4 transformation matrix
+            Eigen::Matrix4f initial_guess = Eigen::Matrix4f::Identity();
+            initial_guess.block<3,1>(0,3) << msg->X0[0], msg->X0[1], msg->X0[2]; // Translation
+            // initial_guess.block<3,1>(0,3) << 0., 0., 0.; // Translation
+            Eigen::Matrix3f rot;
+            rot = Eigen::AngleAxisf(msg->X0[3], Eigen::Vector3f::UnitX()) *  // Roll
+                Eigen::AngleAxisf(msg->X0[4], Eigen::Vector3f::UnitY()) *  // Pitch
+                Eigen::AngleAxisf(msg->X0[5], Eigen::Vector3f::UnitZ());   // Yaw
+            initial_guess.block<3,3>(0,0) = rot;
+
+            // Apply ICP with initial transform
+            // pcl::PointCloud<pcl::PointXYZ> Final;
+
+            double max_corr_dist = 1.0;  
+            Eigen::Matrix4f final_transform = initial_guess;
+            Eigen::VectorXf X(6);
+
+            //coarse to fine ICP
+            for (int i = 0; i < 5; i++){
+                //hold off on using a finer version of each pc until we've converged a bit
+                if (i >= 3){
+                    icp.setInputSource(cloud_source_fine);
+                    icp.setInputTarget(cloud_target_fine);
+                }
+
+                icp.setMaxCorrespondenceDistance(max_corr_dist);  // Set a reasonable threshold
+                pcl::PointCloud<pcl::PointXYZ>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+                icp.align(*aligned_cloud, final_transform);  // Pass initial transformation
+
+                // Check if ICP diverged
+                if (!icp.hasConverged()) {
+                    X << 0., 0., 0., 0., 0., 0.; 
+                    std::cout << "ICP did not converge!" << std::endl;
+                    break;
+                }
+
+                //coarse to fine registration
+                std::cout << "ICP converged, score: " << icp.getFitnessScore() << std::endl;
+
+                // Extract transformation matrix
+                Eigen::Matrix4f transformation = icp.getFinalTransformation();
+                // std::cout << "ICP Transformation Matrix: \n" << transformation << std::endl;
+
+                // Extract translation (X, Y, Z)
+                Eigen::Vector3f translation = transformation.block<3,1>(0,3);
+                
+                // Extract rotation (convert to roll-pitch-yaw)
+                Eigen::Matrix3f rotation = transformation.block<3,3>(0,0);
+                double roll  = atan2(rotation(2,1), rotation(2,2));
+                double pitch = asin(-rotation(2,0));
+                double yaw   = atan2(rotation(1,0), rotation(0,0));
+
+                // Store the results in X (similar to ICET output)
+                X << translation(0), translation(1), translation(2), roll, pitch, yaw;
+
+                std::cout << "Estimated Pose (ICP) at iteration " << i << ":  " << X.transpose() << std::endl;
+
+                // Update transform and decrease correspondence threshold
+                final_transform = icp.getFinalTransformation();
+                max_corr_dist *= 0.625;  // Reduce threshold gradually
+            }
+
             //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
             //publish as loop closure msg (need to send back to pose graph node)
             woodhouse::LoopClosed loop_closure_msg;
             loop_closure_msg.scan1_index = msg->scan1_index;
@@ -137,12 +230,35 @@ public:
 
     }
 
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr downsampleCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud, float leaf_size) {
+        pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+
+        pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
+        voxel_filter.setInputCloud(input_cloud);
+        voxel_filter.setLeafSize(leaf_size, leaf_size, leaf_size);  // Set voxel grid size
+        voxel_filter.filter(*filtered_cloud);
+
+        return filtered_cloud;
+    }
+
     Eigen::MatrixXf convertPCLtoEigen(const pcl::PointCloud<pcl::PointXYZ>::Ptr& pcl_cloud) {
         Eigen::MatrixXf eigen_matrix(pcl_cloud->size(), 3);
         for (size_t i = 0; i < pcl_cloud->size(); ++i) {
             eigen_matrix.row(i) << pcl_cloud->points[i].x, pcl_cloud->points[i].y, pcl_cloud->points[i].z;
         }
         return eigen_matrix;
+    }
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr eigenToPCL(const Eigen::MatrixXf& eigen_mat) {
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
+        cloud->resize(eigen_mat.rows());
+        for (int i = 0; i < eigen_mat.rows(); ++i) {
+            cloud->points[i].x = eigen_mat(i, 0);
+            cloud->points[i].y = eigen_mat(i, 1);
+            cloud->points[i].z = eigen_mat(i, 2);
+        }
+        return cloud;
     }
 
     Eigen::MatrixXf removeNaNRows(const Eigen::MatrixXf& input) {
