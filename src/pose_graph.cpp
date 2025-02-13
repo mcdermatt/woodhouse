@@ -62,6 +62,7 @@ public:
             Keyframe frame_i;
             frame_i.last_scan_index=msg -> last_scan_index;
             frame_i.point_cloud = msg->point_cloud;
+            frame_i.odom_constraint = msg->odom_constraint;
             frames_[msg->scan_index] = frame_i;
             cout << "holding on to frame" << msg->scan_index << "in pose graph node" << endl;
         }        
@@ -71,8 +72,8 @@ public:
         string fn = "keyframe_" + to_string(msg->scan_index) + ".csv";
         savePointCloudToCSV(msg->point_cloud, fn);
 
-        // save odom constraints to text file
-        appendPoseToCSV("pose_data.csv", msg->last_scan_index, msg->scan_index, msg->odom_constraint);
+        // // save odom constraints to text file
+        appendPoseToCSV("pose_data.csv", 0, msg->last_scan_index, msg->scan_index, msg->odom_constraint);
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     }
@@ -81,10 +82,10 @@ public:
         cout << "Received loop closure constraint between: " << msg->scan1_index << " and " << msg->scan2_index << endl;
         cout << msg->loop_closure_constraint << endl;
 
-        // //For debug with Jupyter Notebook: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // // save loop closure constraint to text file
-        // appendPoseToCSV("pose_data.csv", msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
-        // // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //For debug with Jupyter Notebook: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // save loop closure constraint to text file
+        appendPoseToCSV("pose_data.csv", 1, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     }
 
@@ -97,6 +98,36 @@ public:
         here_are_the_clouds_msg.scan2_index = msg->scan2_index;
         here_are_the_clouds_msg.point_cloud1 = frames_[msg->scan1_index].point_cloud;
         here_are_the_clouds_msg.point_cloud2 = frames_[msg->scan2_index].point_cloud;
+
+        //provide initial transform from odometry constraint if subsequent point clouds
+        if (msg->scan2_index - msg->scan1_index == 1){
+
+            //convert odom constraint quats to roll pitch yaw
+            Eigen::Quaterniond q(frames_[msg->scan1_index].odom_constraint.orientation.w, 
+                                 frames_[msg->scan1_index].odom_constraint.orientation.x, 
+                                 frames_[msg->scan1_index].odom_constraint.orientation.y, 
+                                 frames_[msg->scan1_index].odom_constraint.orientation.z);
+
+            // //was creating errors with gimbal lock!!!
+            // Eigen::Vector3d rpy = q.toRotationMatrix().eulerAngles(2, 1, 0); // Yaw (Z), Pitch (Y), Roll (X)
+            //restry with rotation matrix
+            Eigen::Matrix3d R = q.toRotationMatrix();
+            double roll  = atan2(R(2,1), R(2,2));
+            double pitch = asin(-R(2,0));
+            double yaw   = atan2(R(1,0), R(0,0));
+            Eigen::Vector3d rpy(roll, pitch, yaw);
+
+            cout << "seeding roll: " << rpy[2] << " pitch: " << rpy[1] << " yaw: " << rpy[0] << endl;
+
+            here_are_the_clouds_msg.X0 = vector<float>{frames_[msg->scan1_index].odom_constraint.position.x,
+                                                       frames_[msg->scan1_index].odom_constraint.position.y,
+                                                       frames_[msg->scan1_index].odom_constraint.position.z,
+                                                       rpy[0], rpy[1], rpy[2]};
+        }else{
+            //otherwise just set initial estimate to zeros
+            here_are_the_clouds_msg.X0 = vector<float>{0., 0., 0., 0., 0., 0.};
+        }
+
         here_are_the_clouds_pub_.publish(here_are_the_clouds_msg);
     }
 
@@ -162,12 +193,12 @@ private:
             return;
         }
 
-        csv_file << "scan1_index,scan2_index,position_x,position_y,position_z,orientation_x,orientation_y,orientation_z,orientation_w\n";
+        csv_file << "constraint_type,scan1_index,scan2_index,position_x,position_y,position_z,orientation_x,orientation_y,orientation_z,orientation_w\n";
         csv_file.close();
         ROS_INFO("Initialized pose CSV file: %s", filename.c_str());
     }
 
-    void appendPoseToCSV(const std::string& filename, int scan1_index, int scan2_index, const geometry_msgs::Pose& pose) {
+    void appendPoseToCSV(const std::string& filename, int constraint_type, int scan1_index, int scan2_index, const geometry_msgs::Pose& pose) {
         // Open the CSV file in append mode
         std::ofstream csv_file(filename, std::ios::app);
         if (!csv_file.is_open()) {
@@ -176,7 +207,7 @@ private:
         }
 
         // Append the scan index and pose information
-        csv_file << scan1_index << "," << scan2_index << ","
+        csv_file << constraint_type << "," << scan1_index << "," << scan2_index << ","
                  << pose.position.x << "," << pose.position.y << "," << pose.position.z << ","
                  << pose.orientation.x << "," << pose.orientation.y << "," 
                  << pose.orientation.z << "," << pose.orientation.w << "\n";

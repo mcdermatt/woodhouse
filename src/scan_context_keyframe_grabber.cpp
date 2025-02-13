@@ -120,8 +120,8 @@ public:
 
             //create keyframe data msg
             woodhouse::KeyframeData keyframe_msg;
-            keyframe_msg.scan_index = keyframeCount;
-            keyframe_msg.last_scan_index = keyframeCount - 1;
+            keyframe_msg.scan_index = keyframeCount +1 ;
+            keyframe_msg.last_scan_index = keyframeCount;
             keyframe_msg.point_cloud = *msg;
             std::vector<float> flattened_context;        
             for (int i = 0; i < latest_context.rows(); ++i) {
@@ -139,15 +139,16 @@ public:
             //get relative rotation since last keyframe
             rot_eigen.normalize();
             quat_at_last_kf.normalize();
-            Eigen::Quaternionf q_relative = rot_eigen * quat_at_last_kf.inverse();
+            Eigen::Quaternionf q_relative = quat_at_last_kf.inverse() * rot_eigen;
             q_relative.normalize();
 
             //bring translation of platform since last keyframe in body frame coordinate system
-            auto dx_world = (trans_.x - pose_at_last_kf[0]);
-            auto dy_world = (trans_.y - pose_at_last_kf[1]);
-            auto dz_world = (trans_.z - pose_at_last_kf[2]);
+            auto dx_world = (pose_at_last_kf[0] - trans_.x);
+            auto dy_world = (pose_at_last_kf[1] - trans_.y);
+            auto dz_world = (pose_at_last_kf[2] - trans_.z);
             Eigen::Vector3f delta_world(dx_world, dy_world, dz_world);
-            Eigen::Vector3f delta_body_frame = q_relative * delta_world;
+            // Eigen::Vector3f delta_body_frame = q_relative * delta_world; //old
+            Eigen::Vector3f delta_body_frame = quat_at_last_kf.inverse() * delta_world; //test
             keyframe_msg.odom_constraint.position.x = delta_body_frame[0];
             keyframe_msg.odom_constraint.position.y = delta_body_frame[1];
             keyframe_msg.odom_constraint.position.z = delta_body_frame[2];
@@ -161,7 +162,6 @@ public:
             keyframe_data_pub_.publish(keyframe_msg);
 
             // //create message to tell pose graph node to grab these scans (only if valid match)
-            // if (loop_id > -1){
             //     woodhouse::GetTheseClouds get_clouds_msg;
             //     get_clouds_msg.scan1_index = keyframeCount;
             //     get_clouds_msg.scan2_index = loop_id;
@@ -206,7 +206,7 @@ public:
     Eigen::VectorXf X0;
 
 private:
-    const float dist_thresh = 0.3;
+    const float dist_thresh = 1.0;
     const int frame_thresh = 10;
 
     ros::NodeHandle nh_;

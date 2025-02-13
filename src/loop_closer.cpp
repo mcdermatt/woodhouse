@@ -102,14 +102,19 @@ public:
 
         if (pc1_matrix.size() > 1000 && pc2_matrix.size() > 1000){
             // RUN ICET ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            int run_length = 7;
+            int run_length = 12;
             int numBinsPhi = 24;
-            int numBinsTheta = 75; 
-            //seed initial estimate -- TODO-- update msg to add seed TF
+            int numBinsTheta = 65; 
+            int n = 25; //min points per voxel
+            float thresh = 0.5;  // Jump threshold for beginning and ending radial clusters
+            float buff = 0.5;    //buffer to add to inner and outer cluster range (helps attract nearby distributions)
+            //seed initial estimate
             Eigen::VectorXf X0(6);
-            X0 << 0., 0., 0., 0., 0., 0.; 
-            // X0 << X[0], X[1], X[2], X[3], X[4], X[5]; 
-            ICET it(pc1_matrix, pc2_matrix, run_length, X0, numBinsPhi, numBinsTheta);
+            // X0 << 0., 0., 0., 0., 0., 0.; 
+            //TODO: confirm this is correct!
+            X0 << -1*msg->X0[0], -1*msg->X0[1], -1*msg->X0[2], msg->X0[3], msg->X0[4], msg->X0[5]; 
+            cout << "X0: " << X0 << endl;
+            ICET it(pc1_matrix, pc2_matrix, run_length, X0, numBinsPhi, numBinsTheta, n, thresh, buff);
             Eigen::VectorXf X = it.X;
             cout << "soln: " << endl << X << endl;
             //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
