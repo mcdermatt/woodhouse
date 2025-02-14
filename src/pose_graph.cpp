@@ -103,10 +103,10 @@ public:
         if (msg->scan2_index - msg->scan1_index == 1){
 
             //convert odom constraint quats to roll pitch yaw
-            Eigen::Quaterniond q(frames_[msg->scan1_index].odom_constraint.orientation.w, 
-                                 frames_[msg->scan1_index].odom_constraint.orientation.x, 
-                                 frames_[msg->scan1_index].odom_constraint.orientation.y, 
-                                 frames_[msg->scan1_index].odom_constraint.orientation.z);
+            Eigen::Quaterniond q(frames_[msg->scan2_index].odom_constraint.orientation.w, 
+                                 frames_[msg->scan2_index].odom_constraint.orientation.x, 
+                                 frames_[msg->scan2_index].odom_constraint.orientation.y, 
+                                 frames_[msg->scan2_index].odom_constraint.orientation.z);
 
             // //was creating errors with gimbal lock!!!
             // Eigen::Vector3d rpy = q.toRotationMatrix().eulerAngles(2, 1, 0); // Yaw (Z), Pitch (Y), Roll (X)
@@ -119,9 +119,9 @@ public:
 
             cout << "seeding roll: " << rpy[0] << " pitch: " << rpy[1] << " yaw: " << rpy[2] << endl;
 
-            here_are_the_clouds_msg.X0 = vector<float>{frames_[msg->scan1_index].odom_constraint.position.x,
-                                                       frames_[msg->scan1_index].odom_constraint.position.y,
-                                                       frames_[msg->scan1_index].odom_constraint.position.z,
+            here_are_the_clouds_msg.X0 = vector<float>{frames_[msg->scan2_index].odom_constraint.position.x,
+                                                       frames_[msg->scan2_index].odom_constraint.position.y,
+                                                       frames_[msg->scan2_index].odom_constraint.position.z,
                                                        rpy[0], rpy[1], rpy[2]};
         }else{
             //otherwise just set initial estimate to zeros

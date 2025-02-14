@@ -5,6 +5,12 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>  // Add this line for tf2_ros::Buffer
@@ -36,7 +42,6 @@ using namespace Eigen;
 
 // publishes a 6DOF transform relatinig the two provided point clouds to one another 
 
-// TODO-- should we also include an initial estimate to seed these transforms?
 // TODO-- add flag for ICET solution digerging--- don't add LC constraint to graph if so   
 
 class LoopCloserNode {
@@ -66,7 +71,7 @@ public:
         Eigen::MatrixXf pc2_matrix = convertPCLtoEigen(pcl_cloud2);
 
         // Filter out points less than distance 'd' from the origin
-        float minD = 2.;
+        float minD = 0.5;
         vector<int> not_too_close_idxs1;
         for (int i = 0; i < pc1_matrix.rows(); i++){
             float distance = pc1_matrix.row(i).norm();
@@ -129,6 +134,8 @@ public:
             //remove points too close to origin and downsample
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_source = eigenToPCL(pc1_matrix);
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_target = eigenToPCL(pc2_matrix);
+            removeGroundPlane(cloud_source);
+            removeGroundPlane(cloud_target);
             float voxel_size_coarse = 0.5;  // 0.5 best so far... Adjust voxel size as needed
             float voxel_size_fine = 0.2;
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_source_coarse = downsampleCloud(cloud_source, voxel_size_coarse);
@@ -160,7 +167,7 @@ public:
             // Apply ICP with initial transform
             // pcl::PointCloud<pcl::PointXYZ> Final;
 
-            double max_corr_dist = 1.0;  
+            double max_corr_dist = 0.5;  
             Eigen::Matrix4f final_transform = initial_guess;
             Eigen::VectorXf X(6);
 
@@ -230,6 +237,34 @@ public:
 
     }
 
+    void removeGroundPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud){
+        pcl::SACSegmentation<pcl::PointXYZ> seg;
+        pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+        pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+        pcl::ExtractIndices<pcl::PointXYZ> extract;
+
+        // Configure RANSAC
+        seg.setOptimizeCoefficients(true);
+        seg.setModelType(pcl::SACMODEL_PLANE);
+        seg.setMethodType(pcl::SAC_RANSAC);
+        seg.setDistanceThreshold(0.15);  // Adjust for your dataset (meters)
+        seg.setInputCloud(cloud);
+        seg.segment(*inliers, *coefficients);
+
+        if (inliers->indices.empty())
+        {
+            std::cerr << "No ground plane found!" << std::endl;
+            return;
+        }
+
+        // Remove the ground plane
+        extract.setInputCloud(cloud);
+        extract.setIndices(inliers);
+        extract.setNegative(true);  // Keep only outliers (non-ground points)
+        extract.filter(*cloud);
+
+        std::cout << "Ground plane removed. Remaining points: " << cloud->size() << std::endl;
+    }
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr downsampleCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud, float leaf_size) {
         pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>());
