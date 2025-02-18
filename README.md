@@ -54,6 +54,12 @@ Run node to convert button output to twist message
 
 ``` python3 cmd_vel_to_odrive.py```
 
+Get 8bitdo controller talking with follwing commands:
+ 
+ ```sudo nano /etc/udev/rules.d/99-8bitdo-xinput.rules ```
+
+   ```ACTION=="add", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="3106", RUN+="/sbin/modprobe xpad", RUN+="/bin/sh -c 'echo 2dc8 3106 > /sys/bus/usb/drivers/xpad/new_id'"```
+
 # TODO
 
 #### Platform
@@ -62,21 +68,16 @@ Run node to convert button output to twist message
 
 #### Mapping and Localization
 
-* [ ] Fix reflections off back of laptop! 
-* [X] run ICET odometry
-* [X] Explore message passing for scan context features--> Custom keyframe msg type, service, or local storage
-* [ ] Detect loop closure canidates
-* [ ] topic vs service for fetching clouds from idx for loop closer node
+* [ ] Add yaw (from scan context) to loop closure canidates
+
+* [ ] Use ICP Chamfer Distance to determine whether or not registration was successful
+
 * [ ] Save keyframe point clouds and associated odometry constraints to exteral file
 * [ ] compile gtsam with python binds
-* [ ] make jupyter notebook to debug odometry constraints output by scan context node
-* [ ] Create loop closer node to run ICET again to obtain loop closure constraints
-
+* [ ] Fix reflections off back of laptop! 
 
 #### Hardware
 
-* Get 8bitdo controller talking with follwing commands:
- 
- ```sudo nano /etc/udev/rules.d/99-8bitdo-xinput.rules ```
+* [ ] Add in 
 
-   ```ACTION=="add", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="3106", RUN+="/sbin/modprobe xpad", RUN+="/bin/sh -c 'echo 2dc8 3106 > /sys/bus/usb/drivers/xpad/new_id'"```
+* [ ] Push updated CAD

@@ -120,10 +120,11 @@ public:
             Eigen::VectorXd latest_context_flat = Eigen::Map<Eigen::VectorXd>(latest_context.data(), latest_context.size());
 
             int loop_id = -1;
+            float yaw_diff_in_rad = 0.;
             if (keyframeCount > 0){
                 std::pair<int, float> result = sc_manager_.detectLoopClosureID();
                 loop_id = result.first;
-                float yaw_diff_in_rad = result.second;
+                yaw_diff_in_rad = result.second;
                 std::cout << "loop_id:" << loop_id << std::endl;
             }
 
@@ -170,12 +171,14 @@ public:
             keyframe_msg.ring_keys = flattened_keyring;
             keyframe_data_pub_.publish(keyframe_msg);
 
-            // //create message to tell pose graph node to grab these scans (only if valid match)
-            //     woodhouse::GetTheseClouds get_clouds_msg;
-            //     get_clouds_msg.scan1_index = keyframeCount;
-            //     get_clouds_msg.scan2_index = loop_id;
-            //     get_these_clouds_pub_.publish(get_clouds_msg);
-            // }
+            //create message to tell pose graph node to grab these scans (only if valid match)
+            if (loop_id != -1){
+                woodhouse::GetTheseClouds get_clouds_msg;
+                get_clouds_msg.scan1_index = keyframeCount;
+                get_clouds_msg.scan2_index = loop_id;
+                get_clouds_msg.yaw_diff_rad = yaw_diff_in_rad;
+                get_these_clouds_pub_.publish(get_clouds_msg);
+            }
 
             //tell pose graph node to grab every subsequent keyframe for registration
             //starting one behind to give pose graph node time to catch up
@@ -183,6 +186,7 @@ public:
                 woodhouse::GetTheseClouds get_neighbor_clouds_msg;
                 get_neighbor_clouds_msg.scan1_index = keyframeCount-2;
                 get_neighbor_clouds_msg.scan2_index = keyframeCount-1;
+                get_neighbor_clouds_msg.yaw_diff_rad = 0; //hold to zero here
                 get_these_clouds_pub_.publish(get_neighbor_clouds_msg);
             }
 
@@ -192,22 +196,6 @@ public:
             quat_at_last_kf = rot_eigen;
             frames_since_last_kf = 0;
             keyframeCount++;
-
-            // //DEBUG save csv of scan context
-            // std::ofstream file("latest_scan_context.csv");
-            // if (file.is_open()) {
-            //     file << latest_context.format(Eigen::IOFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ",", "\n"));
-            //     file.close();
-            // }
-            // //DEBUG display scan context as image using opencv
-            // cv::Mat context_image(latest_context.rows(), latest_context.cols(), CV_64F, const_cast<double*>(latest_context.data()));
-            // cv::normalize(context_image, context_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-            // cv::Mat resized_image;
-            // int scale_factor = 10; // Increase this for larger size
-            // cv::resize(context_image, resized_image, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
-            // // Display the resized image
-            // cv::imshow("Scan Context", resized_image);
-            // cv::waitKey(0);
         }
 
     }

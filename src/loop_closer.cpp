@@ -71,7 +71,7 @@ public:
         Eigen::MatrixXf pc2_matrix = convertPCLtoEigen(pcl_cloud2);
 
         // Filter out points less than distance 'd' from the origin
-        float minD = 0.5;
+        float minD = 1.;
         vector<int> not_too_close_idxs1;
         for (int i = 0; i < pc1_matrix.rows(); i++){
             float distance = pc1_matrix.row(i).norm();

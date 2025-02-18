@@ -82,9 +82,15 @@ public:
         cout << "Received loop closure constraint between: " << msg->scan1_index << " and " << msg->scan2_index << endl;
         cout << msg->loop_closure_constraint << endl;
 
-        //For debug with Jupyter Notebook: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // save loop closure constraint to text file
-        appendPoseToCSV("pose_data.csv", 1, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+        // save loop closure constraint to text file ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // subsequent keyframes
+        if (msg->scan2_index - msg->scan1_index == 1){ 
+            appendPoseToCSV("pose_data.csv", 1, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+        }
+        //actual loop closure
+        else{
+            appendPoseToCSV("pose_data.csv", 2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+        }
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     }
@@ -124,8 +130,11 @@ public:
                                                        frames_[msg->scan2_index].odom_constraint.position.z,
                                                        rpy[0], rpy[1], rpy[2]};
         }else{
-            //otherwise just set initial estimate to zeros
-            here_are_the_clouds_msg.X0 = vector<float>{0., 0., 0., 0., 0., 0.};
+            //otherwise we are doing a loop closure constraint (use yaw difference provided by scan context 
+            //  to seed ICP)
+            //TODO-- sign on yaw_seed might need to be flipped...
+            float yaw_seed = msg->yaw_diff_rad;
+            here_are_the_clouds_msg.X0 = vector<float>{0., 0., 0., 0., 0., yaw_seed};
         }
 
         here_are_the_clouds_pub_.publish(here_are_the_clouds_msg);
