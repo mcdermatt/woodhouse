@@ -39,10 +39,7 @@ using namespace std;
 using namespace Eigen;
 
 // Subscribes to "here are the clouds" topic and runs ICET point cloud registration
-
 // publishes a 6DOF transform relatinig the two provided point clouds to one another 
-
-// TODO-- add flag for ICET solution digerging--- don't add LC constraint to graph if so   
 
 class LoopCloserNode {
 public:
@@ -238,7 +235,7 @@ public:
             double reverse_fitness = icp.getFitnessScore(2.0);
             double alignment_fitness = (forward_fitness + reverse_fitness)/2;
 
-            double alignment_thresh = 1.0;
+            double alignment_thresh = 0.50;
             if (alignment_fitness > alignment_thresh){
                 loop_closure_msg.failed_to_converge = true;
             } else{

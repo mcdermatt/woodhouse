@@ -21,6 +21,8 @@
 #include <cmath>
 #include "woodhouse/KeyframeData.h"
 #include "woodhouse/GetTheseClouds.h"
+#include "woodhouse/KeyframePose.h"
+#include "woodhouse/KeyframePoses.h"
 
 using namespace std;
 using namespace Eigen;
@@ -33,6 +35,8 @@ public:
         pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &ScanContextNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
         keyframe_data_pub_ =  nh_.advertise<woodhouse::KeyframeData>("/keyframe_data", 10);
         get_these_clouds_pub_ =  nh_.advertise<woodhouse::GetTheseClouds>("/get_these_clouds", 10);
+        keyframe_pose_sub_ = nh_.subscribe("/optimized_keyframe_poses", 10, &ScanContextNode::keyframePosesCallback, this);
+        keyframe_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/keyframe_cloud", 10);
 
         ros::Rate rate(50);
         pose_at_last_kf.resize(3);
@@ -200,6 +204,26 @@ public:
 
     }
 
+    void keyframePosesCallback(const woodhouse::KeyframePoses::ConstPtr& msg) {
+        pcl::PointCloud<pcl::PointXYZ> cloud;
+
+        for (const auto& kf : msg->keyframes) {
+            pcl::PointXYZ point;
+            point.x = kf.pose.position.x;
+            point.y = kf.pose.position.y;
+            point.z = kf.pose.position.z;
+            cloud.push_back(point);
+        }
+
+        // Convert to ROS PointCloud2
+        sensor_msgs::PointCloud2 cloud_msg;
+        pcl::toROSMsg(cloud, cloud_msg);
+        cloud_msg.header.stamp = ros::Time::now();
+        cloud_msg.header.frame_id = "map"; // Use the correct frame
+
+        keyframe_cloud_pub_.publish(cloud_msg);
+    }
+
     Eigen::VectorXf X0;
 
 private:
@@ -213,6 +237,8 @@ private:
     ros::Subscriber pointcloud_sub_;
     ros::Publisher keyframe_data_pub_;
     ros::Publisher get_these_clouds_pub_;
+    ros::Subscriber keyframe_pose_sub_;
+    ros::Publisher keyframe_cloud_pub_;
 
     SCManager sc_manager_; // ScanContext manager instance
 
