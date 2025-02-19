@@ -125,7 +125,7 @@ public:
             // Eigen::VectorXf X = it.X;
             // cout << "soln: " << endl << X << endl;
 
-            //DEBUG-- RUN ICP instead ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            //RUN ICP instead (more robust with perspective shift) ~~~~~~~~~~~
             // Initialize ICP
             pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
             // //use entire PC
@@ -136,7 +136,7 @@ public:
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_target = eigenToPCL(pc2_matrix);
             removeGroundPlane(cloud_source);
             removeGroundPlane(cloud_target);
-            float voxel_size_coarse = 0.5;  // 0.5 best so far... Adjust voxel size as needed
+            float voxel_size_coarse = 0.5;  // 0.5 best so far...
             float voxel_size_fine = 0.2;
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_source_coarse = downsampleCloud(cloud_source, voxel_size_coarse);
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_target_coarse = downsampleCloud(cloud_target, voxel_size_coarse);
@@ -164,12 +164,20 @@ public:
                 Eigen::AngleAxisf(msg->X0[5], Eigen::Vector3f::UnitZ());   // Yaw
             initial_guess.block<3,3>(0,0) = rot;
 
-            // Apply ICP with initial transform
-            // pcl::PointCloud<pcl::PointXYZ> Final;
+            double max_corr_dist;
+            // provide finer initial max correspondance distnance when we're aligning neighboring keyframes
+            // (should have a relatively good initial registration from odometry)
+            if (msg->scan2_index - msg->scan1_index == 1){
+                max_corr_dist = 0.5;
+            } else{
+            //provide coarser initial max correspondance distance when we are doing loop closure
+                max_corr_dist = 3.0;
+            }
 
-            double max_corr_dist = 0.5;  
             Eigen::Matrix4f final_transform = initial_guess;
             Eigen::VectorXf X(6);
+
+            pcl::PointCloud<pcl::PointXYZ>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZ>());
 
             //coarse to fine ICP
             for (int i = 0; i < 5; i++){
@@ -179,9 +187,9 @@ public:
                     icp.setInputTarget(cloud_target_fine);
                 }
 
-                icp.setMaxCorrespondenceDistance(max_corr_dist);  // Set a reasonable threshold
-                pcl::PointCloud<pcl::PointXYZ>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZ>());
-                icp.align(*aligned_cloud, final_transform);  // Pass initial transformation
+                icp.setMaxCorrespondenceDistance(max_corr_dist);
+                aligned_cloud->clear();
+                icp.align(*aligned_cloud, final_transform);
 
                 // Check if ICP diverged
                 if (!icp.hasConverged()) {
@@ -209,17 +217,34 @@ public:
                 // Store the results in X (similar to ICET output)
                 X << translation(0), translation(1), translation(2), roll, pitch, yaw;
 
-                std::cout << "Estimated Pose (ICP) at iteration " << i << ":  " << X.transpose() << std::endl;
+                // std::cout << "Estimated Pose (ICP) at iteration " << i << ":  " << X.transpose() << std::endl;
 
                 // Update transform and decrease correspondence threshold
                 final_transform = icp.getFinalTransformation();
                 max_corr_dist *= 0.625;  // Reduce threshold gradually
             }
-
+            std::cout << "X = " << X.transpose() << std::endl;
             //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
             //publish as loop closure msg (need to send back to pose graph node)
             woodhouse::LoopClosed loop_closure_msg;
+
+            // // //one way distances
+            // double alignment_fitness = icp.getFitnessScore(); 
+            //Bidirectional distances
+            double forward_fitness = icp.getFitnessScore(2.0);
+            icp.setInputSource(cloud_target_fine);
+            icp.setInputTarget(aligned_cloud);
+            double reverse_fitness = icp.getFitnessScore(2.0);
+            double alignment_fitness = (forward_fitness + reverse_fitness)/2;
+
+            double alignment_thresh = 1.0;
+            if (alignment_fitness > alignment_thresh){
+                loop_closure_msg.failed_to_converge = true;
+            } else{
+                loop_closure_msg.failed_to_converge = false;
+            }
+
             loop_closure_msg.scan1_index = msg->scan1_index;
             loop_closure_msg.scan2_index = msg->scan2_index;
             loop_closure_msg.loop_closure_constraint.position.x = X[0];
@@ -263,7 +288,7 @@ public:
         extract.setNegative(true);  // Keep only outliers (non-ground points)
         extract.filter(*cloud);
 
-        std::cout << "Ground plane removed. Remaining points: " << cloud->size() << std::endl;
+        // std::cout << "Ground plane removed. Remaining points: " << cloud->size() << std::endl;
     }
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr downsampleCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud, float leaf_size) {

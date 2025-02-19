@@ -89,7 +89,10 @@ public:
         }
         //actual loop closure
         else{
-            appendPoseToCSV("pose_data.csv", 2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+            //ignore instances where ICP diverges
+            if (msg->failed_to_converge == false){
+                appendPoseToCSV("pose_data.csv", 2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+            }
         }
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -134,7 +137,7 @@ public:
             //  to seed ICP)
             //TODO-- sign on yaw_seed might need to be flipped...
             float yaw_seed = msg->yaw_diff_rad;
-            here_are_the_clouds_msg.X0 = vector<float>{0., 0., 0., 0., 0., yaw_seed};
+            here_are_the_clouds_msg.X0 = vector<float>{0., 0., 0., 0., 0., -yaw_seed};
         }
 
         here_are_the_clouds_pub_.publish(here_are_the_clouds_msg);

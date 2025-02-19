@@ -203,7 +203,7 @@ public:
     Eigen::VectorXf X0;
 
 private:
-    const float dist_thresh = 2.0;
+    const float dist_thresh = 0.500;
     const int frame_thresh = 10;
     const double heading_thresh = 0.4; // magnitude of heading change that triggers automatic re-keyframe (radians)
 
