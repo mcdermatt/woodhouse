@@ -7,6 +7,11 @@ project(woodhouse)
 # Add this line to define the alignment for Eigen
 add_definitions(-DEIGEN_ALIGN_16)
 
+# find_package(PCL REQUIRED PATHS ~/ROS/src/pcl-pcl-1.10.0/build NO_DEFAULT_PATH)
+# include_directories(${PCL_INCLUDE_DIRS})
+# link_directories(${PCL_LIBRARY_DIRS})
+# add_definitions(${PCL_DEFINITIONS})
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -112,6 +117,16 @@ target_link_libraries(pose_graph_node
 add_executable(loop_closer_node 
                 src/loop_closer.cpp)
 target_link_libraries(loop_closer_node
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  tbb
+  icet
+)
+
+add_executable(loop_closer_eigen_node 
+                src/loop_closer_eigen.cpp)
+target_link_libraries(loop_closer_eigen_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenCV_LIBS}
