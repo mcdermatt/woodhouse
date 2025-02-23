@@ -89,13 +89,13 @@ public:
             ROS_ERROR("Transform error: %s", ex.what());
         }
         frames_since_last_kf++;
-        cout<< frames_since_last_kf << endl;        
+        // cout<< frames_since_last_kf << endl;        
 
         dist_since_last_kf = sqrt(pow(pose_at_last_kf[0] - trans_.x, 2) 
                                 + pow(pose_at_last_kf[1] - trans_.y, 2) 
                                 + pow(pose_at_last_kf[2] - trans_.z, 2));
 
-        std::cout << "dist since last kf " << dist_since_last_kf << endl;
+        // std::cout << "dist since last kf " << dist_since_last_kf << endl;
 
         // Conditions to make a new keyframe
         if (dist_since_last_kf > dist_thresh && frames_since_last_kf > frame_thresh){
