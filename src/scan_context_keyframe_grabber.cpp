@@ -41,7 +41,9 @@ public:
         ros::Rate rate(50);
         pose_at_last_kf.resize(3);
         pose_at_last_kf << 0., 0., 0.;
-        rot_.w = 1.0; //needed for quat initialization
+        rot_.w = 1.0;
+
+        keyframe_poses_.push_back({0.0, 0.0, 0.0});
     }
 
     void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg) {
@@ -93,13 +95,13 @@ public:
             ROS_ERROR("Transform error: %s", ex.what());
         }
         frames_since_last_kf++;
-        cout<< frames_since_last_kf << endl;        
+        // cout<< frames_since_last_kf << endl;        
 
         dist_since_last_kf = sqrt(pow(pose_at_last_kf[0] - trans_.x, 2) 
                                 + pow(pose_at_last_kf[1] - trans_.y, 2) 
                                 + pow(pose_at_last_kf[2] - trans_.z, 2));
 
-        std::cout << "dist since last kf " << dist_since_last_kf << endl;
+        // std::cout << "dist since last kf " << dist_since_last_kf << endl;
 
         //raise flag if we've rotated a sufficiently large amount since the last keyframe
         double dot_product = quat_at_last_kf.dot(rot_eigen);  
@@ -125,12 +127,31 @@ public:
 
             int loop_id = -1;
             float yaw_diff_in_rad = 0.;
+
+            //search for loop closure candidates
             if (keyframeCount > 0){
-                std::pair<int, float> result = sc_manager_.detectLoopClosureID();
-                loop_id = result.first;
-                yaw_diff_in_rad = result.second;
-                std::cout << "loop_id:" << loop_id << std::endl;
+                //search through ALL KEYFRAMES to find loop closure canidate
+                //   (this will fail if we there are multiple similar looking regions)
+                if (limit_keyframe_search_radius == false){
+                    std::pair<int, float> result = sc_manager_.detectLoopClosureID();
+                    loop_id = result.first;
+                    yaw_diff_in_rad = result.second;
+                    std::cout << "loop_id:" << loop_id << std::endl;       
+                }else{
+                    //only search for loop closure in keyframes that are close to sensor
+                    vector<int> validKeyframes = getValidKeyframes(radius_threshold);
+                    cout << "valid keyframes: ";
+                    for (auto e : validKeyframes){
+                        cout << e << " ";
+                    }
+                    cout << endl;
+                    std::pair<int, float> result = sc_manager_.detectLoopClosureIDFiltered(validKeyframes);
+                    loop_id = result.first;
+                    yaw_diff_in_rad = result.second;
+                    std::cout << "loop_id:" << loop_id << std::endl;
+                }
             }
+
 
             //create keyframe data msg
             woodhouse::KeyframeData keyframe_msg;
@@ -207,12 +228,17 @@ public:
     void keyframePosesCallback(const woodhouse::KeyframePoses::ConstPtr& msg) {
         pcl::PointCloud<pcl::PointXYZ> cloud;
 
+        keyframe_poses_ = {}; //reset and start again with 0,0,0 since we're looping through the whole thing
+        keyframe_poses_.push_back({0.0, 0.0, 0.0});
+
         for (const auto& kf : msg->keyframes) {
             pcl::PointXYZ point;
             point.x = kf.pose.position.x;
             point.y = kf.pose.position.y;
             point.z = kf.pose.position.z;
             cloud.push_back(point);
+
+            keyframe_poses_.push_back({kf.pose.position.x, kf.pose.position.y, kf.pose.position.z});
         }
 
         // Convert to ROS PointCloud2
@@ -224,12 +250,37 @@ public:
         keyframe_cloud_pub_.publish(cloud_msg);
     }
 
+    std::vector<int> getValidKeyframes(double radius_threshold) {
+
+        std::vector<int> valid_keyframes;
+        const std::vector<double> current_pose = keyframe_poses_.back();
+
+        for (int i = 0; i < keyframe_poses_.size(); i++) {
+            if (keyframe_poses_[i].size() < 3) continue; // Ensure pose has x, y, z
+
+            float dx = keyframe_poses_[i][0] - current_pose[0];
+            float dy = keyframe_poses_[i][1] - current_pose[1];
+            float dz = keyframe_poses_[i][2] - current_pose[2];
+
+            double distance = std::sqrt(dx * dx + dy * dy + dz * dz); // Euclidean distance
+
+            if (distance < radius_threshold) 
+            {
+                valid_keyframes.push_back(i);
+            }
+        }
+
+        return valid_keyframes;
+    }
+
     Eigen::VectorXf X0;
 
 private:
     const float dist_thresh = 0.500;
     const int frame_thresh = 10;
     const double heading_thresh = 0.4; // magnitude of heading change that triggers automatic re-keyframe (radians)
+    bool limit_keyframe_search_radius = true;
+    double radius_threshold = 2.0; //if limiting search radius
 
     ros::NodeHandle nh_;
     tf2_ros::Buffer tfBuffer_;
@@ -239,6 +290,7 @@ private:
     ros::Publisher get_these_clouds_pub_;
     ros::Subscriber keyframe_pose_sub_;
     ros::Publisher keyframe_cloud_pub_;
+    vector<vector<double>> keyframe_poses_;
 
     SCManager sc_manager_; // ScanContext manager instance
 

@@ -337,4 +337,74 @@ std::pair<int, float> SCManager::detectLoopClosureID ( void )
 
 } // SCManager::detectLoopClosureID
 
+std::pair<int, float> SCManager::detectLoopClosureIDFiltered(const std::vector<int>& candidate_indices)
+{
+    int loop_id { -1 }; // init with -1, -1 means no loop
+    auto curr_key = polarcontext_invkeys_mat_.back(); // current observation (query)
+    auto curr_desc = polarcontexts_.back(); // current observation (query)
+
+    /*
+     * Early return checks
+     */
+    if (polarcontext_invkeys_mat_.size() < NUM_EXCLUDE_RECENT + 1 || candidate_indices.empty())
+    {
+        std::pair<int, float> result {loop_id, 0.0};
+        return result;
+    }
+
+    /*
+     * Instead of using tree search, directly use the provided candidate indices
+     */
+    double min_dist = 10000000; // init with something large
+    int nn_align = 0;
+    int nn_idx = 0;
+
+    TicToc t_calc_dist;
+    
+    // Only iterate through the provided candidate indices
+    for (const int& candidate_idx : candidate_indices)
+    {
+        // Skip if the candidate is too recent
+        if (polarcontexts_.size() - candidate_idx <= NUM_EXCLUDE_RECENT)
+            continue;
+            
+        // Skip if the index is out of bounds
+        if (candidate_idx >= polarcontexts_.size())
+            continue;
+
+        MatrixXd polarcontext_candidate = polarcontexts_[candidate_idx];
+        std::pair<double, int> sc_dist_result = distanceBtnScanContext(curr_desc, polarcontext_candidate);
+        
+        double candidate_dist = sc_dist_result.first;
+        int candidate_align = sc_dist_result.second;
+
+        if (candidate_dist < min_dist)
+        {
+            min_dist = candidate_dist;
+            nn_align = candidate_align;
+            nn_idx = candidate_idx;
+        }
+    }
+    t_calc_dist.toc("Distance calc");
+
+    /*
+     * loop threshold check
+     */
+    if (min_dist < SC_DIST_THRES)
+    {
+        loop_id = nn_idx;
+        cout << "[Loop found] Nearest distance: " << min_dist << " btn " << polarcontexts_.size()-1 << " and " << nn_idx << "." << endl;
+        cout << "[Loop found] yaw diff: " << nn_align * PC_UNIT_SECTORANGLE << " deg." << endl;
+    }
+    else
+    {
+        std::cout.precision(3);
+        cout << "[Not loop] Nearest distance: " << min_dist << " btn " << polarcontexts_.size()-1 << " and " << nn_idx << "." << endl;
+        cout << "[Not loop] yaw diff: " << nn_align * PC_UNIT_SECTORANGLE << " deg." << endl;
+    }
+
+    float yaw_diff_rad = deg2rad(nn_align * PC_UNIT_SECTORANGLE);
+    std::pair<int, float> result {loop_id, yaw_diff_rad};
+    return result;
+}
 // } // namespace SC2

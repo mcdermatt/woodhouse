@@ -71,6 +71,8 @@ public:
     // User-side API
     void makeAndSaveScancontextAndKeys( pcl::PointCloud<SCPointType> & _scan_down );
     std::pair<int, float> detectLoopClosureID( void ); // int: nearest node index, float: relative yaw  
+    //New: specify that we only want to look for a loop closure within candidate_indices
+    std::pair<int, float> detectLoopClosureIDFiltered(const std::vector<int>& candidate_indices);
 
 public:
     // hyper parameters ()
