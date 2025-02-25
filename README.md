@@ -28,6 +28,7 @@ A tracked robotic platform for LiDAR mapping and valet applications
 ```sudo apt-get install ros-noetic-joy```
 
 * icet 
+
 * teleop-twist-joy
 ```
 cd ~/catkin_ws/src
@@ -36,11 +37,46 @@ git clone https://github.com/ros-teleop/teleop_twist_joy
 catkin_make
 ```
 
+* install 8bitdo controller ROS driver:
+ 
+ ```
+ sudo nano /etc/udev/rules.d/99-8bitdo-xinput.rules 
+
+ ACTION=="add", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="3106", RUN+="/sbin/modprobe xpad", RUN+="/bin/sh -c 'echo 2dc8 3106 > /sys/bus/usb/drivers/xpad/new_id'"
+ ```
+
 * gtsam
+```
+cd ~/catkin_ws/src
+git clone https://github.com/borglab/gtsam.git
+git checkout 4.3.0 
+
+mkdir build && cd build
+cmake .. -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_WITH_EIGEN_MKL=OFF -DGTSAM_BUILD_WITH_MARCH_NATIVE=ON -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_PYTHON=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+sudo make install
+
+pip install jupyter pybind11
+
+ldd devel/lib/your_package/your_executable | grep gtsam
+
+```
+
+* install Velodyne drivers
+```
+git clone https://github.com/ros-drivers/velodyne/tree/dashing-devel
+``` 
+
 
 # Running
 
-#### Controller input
+### Velodyne LiDAR Sensor
+
+```
+roslaunch velodyne_pointcloud VLP-32C_points.launch
+```
+
+### Controller input
 
 Run node for joystick input
 
@@ -54,12 +90,6 @@ Run node to convert button output to twist message
 
 ``` python3 cmd_vel_to_odrive.py```
 
-Get 8bitdo controller talking with follwing commands:
- 
- ```sudo nano /etc/udev/rules.d/99-8bitdo-xinput.rules ```
-
-   ```ACTION=="add", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="3106", RUN+="/sbin/modprobe xpad", RUN+="/bin/sh -c 'echo 2dc8 3106 > /sys/bus/usb/drivers/xpad/new_id'"```
-
 # TODO
 
 #### Platform
@@ -68,16 +98,11 @@ Get 8bitdo controller talking with follwing commands:
 
 #### Mapping and Localization
 
-* [ ] Add yaw (from scan context) to loop closure canidates
-
-* [ ] Use ICP Chamfer Distance to determine whether or not registration was successful
-
-* [ ] Save keyframe point clouds and associated odometry constraints to exteral file
 * [ ] compile gtsam with python binds
 * [ ] Fix reflections off back of laptop! 
 
 #### Hardware
 
-* [ ] Add in 
+* [ ] Add assemble new rear belt tensioners
 
 * [ ] Push updated CAD
