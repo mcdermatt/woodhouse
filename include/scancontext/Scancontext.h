@@ -85,13 +85,14 @@ public:
     const double PC_UNIT_RINGGAP = PC_MAX_RADIUS / double(PC_NUM_RING);
 
     // tree
-    const int    NUM_EXCLUDE_RECENT = 10; // 50 simply just keyframe gap, but node position distance-based exclusion is ok. 
+    const int    NUM_EXCLUDE_RECENT = 10; //  50 simply just keyframe gap, but node position distance-based exclusion is ok. 
     const int    NUM_CANDIDATES_FROM_TREE = 20; // 10 is enough. (refer the IROS 18 paper)
 
-    // loop thres
+    // loop thresh
     const double SEARCH_RATIO = 1.0; // 0.1 for fast comparison, no Brute-force, but search 10 % is okay. // not was in the original conf paper, but improved ver.
     // const double SC_DIST_THRES = 0.2; // empirically 0.1-0.2 is fine (rare false-alarms) for 20x60 polar context (but for 0.15 <, DCS or ICP fit score check (e.g., in LeGO-LOAM) should be required for robustness)
     const double SC_DIST_THRES = 0.3; // 0.4-0.6 is good choice for using with robust kernel (e.g., Cauchy, DCS) + icp fitness threshold / if not, recommend 0.1-0.15
+    //^ used 0.3 for indoor apartment dataset
 
     // config 
     const int    TREE_MAKING_PERIOD_ = 20; //50; // i.e., remaking tree frequency, to avoid non-mandatory every remaking, to save time cost / if you want to find a very recent revisits use small value of it (it is enough fast ~ 5-50ms wrt N.).

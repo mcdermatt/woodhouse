@@ -276,11 +276,11 @@ public:
     Eigen::VectorXf X0;
 
 private:
-    const float dist_thresh = 0.500;
+    const float dist_thresh = 0.50; //magnitude translation to trigger re-keyframe (0.5 indoor 2.0? outdoor)
     const int frame_thresh = 10;
     const double heading_thresh = 0.4; // magnitude of heading change that triggers automatic re-keyframe (radians)
     bool limit_keyframe_search_radius = true;
-    double radius_threshold = 2.0; //if limiting search radius
+    double radius_threshold = 2.0; //if limiting search radius-- 2. indoor 10? outdoor?
 
     ros::NodeHandle nh_;
     tf2_ros::Buffer tfBuffer_;

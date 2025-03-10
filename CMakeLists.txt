@@ -12,6 +12,8 @@ add_definitions(-DEIGEN_ALIGN_16)
 # link_directories(${PCL_LIBRARY_DIRS})
 # add_definitions(${PCL_DEFINITIONS})
 
+set(GTSAM_DIR "/usr/local/lib/cmake/GTSAM")
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -24,6 +26,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   message_generation
   icet
+  GTSAM REQUIRED
   # eigen3
 )
 
@@ -93,6 +96,7 @@ include_directories(
   ${PCL_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${icet_INCLUDE_DIRS}
+  ${GTSAM_INCLUDE_DIR}
 )
 
 add_executable(scan_context_node 
@@ -102,6 +106,7 @@ target_link_libraries(scan_context_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenCV_LIBS}
+  ${GTSAM_LIBRARIES}
   tbb
 )
 

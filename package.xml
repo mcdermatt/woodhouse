@@ -70,6 +70,7 @@
   <exec_depend>std_msgs</exec_depend>
 
   <depend>icet</depend>
+  <depend>gtsam</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

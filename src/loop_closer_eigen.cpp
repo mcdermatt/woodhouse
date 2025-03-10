@@ -249,14 +249,14 @@ public:
             // double alignment_fitness = icp.getFitnessScore(); 
             // Bidirectional distances
             double forward_fitness = icp.getFitnessScore(2.0);
-            cout << "got fwd fitness" << endl;
+            // cout << "got fwd fitness" << endl;
             icp.setInputSource(cloud_target_fine);
             icp.setInputTarget(aligned_cloud);
             double reverse_fitness = icp.getFitnessScore(2.0);
-            cout << "got rev fitness" << endl;
+            // cout << "got rev fitness" << endl;
             double alignment_fitness = (forward_fitness + reverse_fitness)/2;
 
-            double alignment_thresh = 0.50;
+            double alignment_thresh = 0.5; //was 0.5 (indoor?)
             loop_closure_msg.failed_to_converge = false;
             if (alignment_fitness > alignment_thresh){
                 loop_closure_msg.failed_to_converge = true;

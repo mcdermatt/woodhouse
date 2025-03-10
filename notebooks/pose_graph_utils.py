@@ -1,25 +1,25 @@
 from vedo import *
-from utils import *
+# from utils import *
 import os
 from ipyvtklink.viewer import ViewInteractiveWidget
-import pykitti
+import vtk
 import numpy as np
 import tensorflow as tf
 from tensorflow.math import sin, cos, tan
-import tensorflow_probability as tfp
-import pickle
+# import tensorflow_probability as tfp
+# import pickle
 import matplotlib.pyplot as plt
 
-#limit GPU memory ------------------------------------------------
-gpus = tf.config.experimental.list_physical_devices('GPU')
-print(gpus)
-if gpus:
-  try:
-    memlim = 4*1024
-    tf.config.experimental.set_virtual_device_configuration(gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=memlim)])
-  except RuntimeError as e:
-    print(e)
-#-----------------------------------------------------------------
+# #limit GPU memory ------------------------------------------------
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# print(gpus)
+# if gpus:
+#   try:
+#     memlim = 4*1024
+#     tf.config.experimental.set_virtual_device_configuration(gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=memlim)])
+#   except RuntimeError as e:
+#     print(e)
+# #-----------------------------------------------------------------
 
 
 def R_tf(angs):
@@ -335,8 +335,8 @@ class Ell(Mesh):
         self.axis3 = axis3
         self.nr_of_points = 1 # used by pcaEllipsoid
 
-        if utils.isSequence(res): #new Vedo
-#         if utils.is_sequence(res): #old Vedo
+        # if utils.isSequence(res): #new Vedo
+        if utils.is_sequence(res): #old Vedo
             res_t, res_phi = res
         else:
             res_t, res_phi = 2*res, res
