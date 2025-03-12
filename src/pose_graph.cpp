@@ -30,14 +30,14 @@ using namespace std;
 using namespace Eigen;
 
 struct Keyframe {
-    int scan_index;                          // Index of the scan
-    int last_scan_index;                     // Last keyframe index for relative odometry constraint
-    sensor_msgs::PointCloud2 point_cloud;    // Point cloud of the keyframe
-    std::vector<float> scan_context;         // Scan context feature vector
-    std::vector<float> ring_keys;            // Ring key feature vector
-    geometry_msgs::Pose odom_constraint;     // Odometry estimate (dead reckoning from registering every raw point cloud )
+    int scan_index;                                       // Index of the scan
+    int last_scan_index;                                  // Last keyframe index for relative odometry constraint
+    sensor_msgs::PointCloud2 point_cloud;                 // Point cloud of the keyframe
+    std::vector<float> scan_context;                      // Scan context feature vector
+    std::vector<float> ring_keys;                         // Ring key feature vector
+    geometry_msgs::Pose odom_constraint;                  // Odometry estimate (dead reckoning from registering every raw point cloud )
     geometry_msgs::Pose sequential_keyframe_registration; //directly using ICP to align subsequent keyframes (less drift than odom)
-    geometry_msgs::Pose world_pose;          // Absolute pose
+    geometry_msgs::Pose world_pose;                       // Absolute pose
 };
 
 class PoseGraphNode {
@@ -80,6 +80,7 @@ public:
     }
 
     map<int, Keyframe> frames_;
+    vector<vector<double>> constraints_; // [x, y, z, r, p, y, keyframe1, keyframe2]
 
     void keyframeDataCallback(const woodhouse::KeyframeData::ConstPtr& msg) {
         // // Print the scan_index from the received message
@@ -100,6 +101,8 @@ public:
         //TODO -- insert pose graph optimization here
         //updateOptimizedPoses()
 
+        //TODO -- after pose graph has convergd a bit try to register rearby point clouds that aren't in constraints yet
+
         publishKeyframePoses();
 
         //For debug with Jupyter Notebook: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -109,8 +112,9 @@ public:
 
         // // save odom constraints to text file
         appendPoseToCSV("pose_data.csv", 0, msg->last_scan_index, msg->scan_index, msg->odom_constraint);
+        //hold on to constraints internally
+        updateConstraints(0, msg->last_scan_index, msg->scan_index, msg->odom_constraint);
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     }
 
     void loopClosureCallback(const woodhouse::LoopClosed::ConstPtr& msg) {
@@ -121,6 +125,7 @@ public:
         // subsequent keyframes -- flag with 1
         if (msg->scan2_index - msg->scan1_index == 1){ 
             appendPoseToCSV("pose_data.csv", 1, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+            updateConstraints(1, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
             //hold on to SKR and associate with frame
             frames_[msg->scan1_index].sequential_keyframe_registration = msg->loop_closure_constraint;
         }
@@ -129,6 +134,7 @@ public:
             //ignore instances where ICP diverges
             if (msg->failed_to_converge == false){
                 appendPoseToCSV("pose_data.csv", 2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+                updateConstraints(2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
             }
             //use all
             // appendPoseToCSV("pose_data.csv", 2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
@@ -202,6 +208,7 @@ public:
         ROS_INFO("PointCloud saved to: %s", filename.c_str());
     }
 
+    //purely based on sequential keyframe registration
     void updateAbsolutePose(int scan_index) {
         if (scan_index == 0) {
             frames_[scan_index].world_pose.position.x = 0.0;
@@ -263,10 +270,6 @@ public:
         new_pose.position.x = t_new.x();
         new_pose.position.y = t_new.y();
         new_pose.position.z = t_new.z();
-
-        // std::cout << "Base Pos: (" << t_base.transpose() << "), \n"
-        //         << "Rel Pos: (" << t_rel.transpose() << "), \n "
-        //         << "New Pos: (" << t_new.transpose() << ")\n";
 
         std::cout << "q_base: " << q_base.coeffs().transpose() << std::endl;
         std::cout << "q_rel: " << q_rel.coeffs().transpose() << std::endl;
@@ -355,8 +358,26 @@ private:
         // ROS_INFO("Appended pose to CSV: scan_index = %d", scan1_index);
     }
 
+    void updateConstraints(int constraint_type, int scan1_index, int scan2_index, const geometry_msgs::Pose& pose){
+        double x = pose.position.x;
+        double y = pose.position.y;
+        double z = pose.position.z;
 
+        tf::Quaternion q(pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
+        double roll, pitch, yaw;
+        tf::Matrix3x3(q).getRPY(roll, pitch, yaw);
 
+        vector<double> new_constraint = {static_cast<double>(constraint_type), 
+                                         x, 
+                                         y, 
+                                         z, 
+                                         roll, 
+                                         pitch, 
+                                         yaw, 
+                                         static_cast<double>(scan1_index),
+                                         static_cast<double>(scan2_index)}; 
+        constraints_.push_back(new_constraint);
+    }
 
 };
 
