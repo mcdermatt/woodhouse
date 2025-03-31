@@ -52,13 +52,23 @@ git clone https://github.com/borglab/gtsam.git
 git checkout 4.3.0 
 
 mkdir build && cd build
-cmake .. -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_WITH_EIGEN_MKL=OFF -DGTSAM_BUILD_WITH_MARCH_NATIVE=ON -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_PYTHON=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DCMAKE_BUILD_TYPE=Release
+<!-- cmake .. -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_WITH_EIGEN_MKL=OFF -DGTSAM_BUILD_WITH_MARCH_NATIVE=ON -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_PYTHON=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DCMAKE_BUILD_TYPE=Release -->
+
+cmake .. -DGTSAM_BUILD_WITH_MARCH_NATIVE=OFF -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_WITH_TBB=ON -DGTSAM_BUILD_PACKAGING=ON -DADDRESS_SANITIZER=OFF
+
 make -j$(nproc)
 sudo make install
 
 pip install jupyter pybind11
+```
+https://github.com/MIT-SPARK/Kimera-VIO-ROS/issues/12
 
-ldd devel/lib/your_package/your_executable | grep gtsam
+https://github.com/RobustFieldAutonomyLab/LeGO-LOAM/issues/247 
+
+use the following command to make sure we are linking our executables against the correct installation of GTSAM 
+
+```
+ldd ~/ROS/devel/lib/woodhouse/pose_graph_node | grep gtsam
 
 ```
 

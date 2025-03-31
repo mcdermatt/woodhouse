@@ -18,6 +18,14 @@
 #include <tf/tf.h>
 #include <tf2/exceptions.h>
 #include <cmath>
+#include <gtsam/geometry/Pose3.h>
+#include <gtsam/geometry/Rot3.h>
+#include <gtsam/nonlinear/ISAM2.h> 
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/PriorFactor.h>
+#include <gtsam/nonlinear/Values.h>
+#include <gtsam/slam/BetweenFactor.h>
 #include "woodhouse/KeyframeData.h"
 #include "woodhouse/GetTheseClouds.h"
 #include "woodhouse/HereAreTheClouds.h"
@@ -28,6 +36,10 @@
 
 using namespace std;
 using namespace Eigen;
+
+// //not sure if this is going to help
+// #define EIGEN_DONT_ALIGN_STATICALLY
+// #define GTSAM_ALLOW_DEPRECATED_SINCE_V4
 
 struct Keyframe {
     int scan_index;                                       // Index of the scan
@@ -77,10 +89,128 @@ public:
         frames_[0].odom_constraint.orientation.x = 0.0;
         frames_[0].odom_constraint.orientation.y = 0.0;
         frames_[0].odom_constraint.orientation.z = 0.0;
+
+        // cout << "attempting to spin up gtsam" << endl;
+
+        // prior_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 1e-3, 1e-3, 1e-3, 1e-3, 1e-3, 1e-3).finished());
+        // odometry_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
+
+        testMinimalGTSAM();
+
     }
 
-    map<int, Keyframe> frames_;
-    vector<vector<double>> constraints_; // [x, y, z, r, p, y, keyframe1, keyframe2]
+    // void testMinimalGTSAM() {
+    //     try {
+    //         std::cout << "Running minimal GTSAM test..." << std::endl;
+            
+    //         // Create a fresh local ISAM2 instance
+    //         gtsam::ISAM2Params parameters;
+    //         gtsam::ISAM2 local_isam(parameters);
+            
+    //         // Create a simple graph with just the prior
+    //         gtsam::NonlinearFactorGraph graph;
+    //         gtsam::Values initial;
+            
+    //         // Define separate noise models for prior and between factors
+    //         gtsam::SharedNoiseModel noise_prior = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
+    //         gtsam::SharedNoiseModel noise_between = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.2, 0.2, 0.2, 0.2, 0.2, 0.2).finished());
+
+    //         // Add a prior on pose 1
+    //         gtsam::Pose3 pose1(gtsam::Rot3::identity(), gtsam::Point3(0, 0, 0));
+    //         graph.add(gtsam::PriorFactor<gtsam::Pose3>(1, pose1, noise_prior));
+    //         initial.insert(1, pose1);
+            
+    //         // Try updating ISAM2
+    //         std::cout << "Updating iSAM2 with prior..." << std::endl;
+    //         local_isam.update(graph, initial);
+    //         std::cout << "Prior update successful." << std::endl;
+            
+    //         // Create a new graph for the next update (do not clear the old one)
+    //         gtsam::NonlinearFactorGraph new_factors;
+    //         gtsam::Values new_values;
+
+    //         // Create a simple constraint from pose 1 to pose 2
+    //         gtsam::Pose3 rel_pose(gtsam::Rot3::Ypr(0.1, 0.0, 0.0), gtsam::Point3(1.0, 0.0, 0.0));
+    //         new_factors.add(gtsam::BetweenFactor<gtsam::Pose3>(1, 2, rel_pose, noise_between));
+            
+    //         // Add initial estimate for pose 2
+    //         gtsam::Pose3 pose2 = pose1.compose(rel_pose);
+    //         new_values.insert(2, pose2);
+            
+    //         // Try updating ISAM2 again
+    //         std::cout << "Updating iSAM2 with constraint..." << std::endl;
+    //         local_isam.update(new_factors, new_values);
+    //         std::cout << "Constraint update successful." << std::endl;
+            
+    //         // Calculate and print final result
+    //         gtsam::Values result = local_isam.calculateEstimate();
+    //         std::cout << "Optimization complete with " << result.size() << " poses" << std::endl;
+            
+    //     } catch (const std::exception& e) {
+    //         std::cerr << "GTSAM Exception: " << e.what() << std::endl;
+    //     } catch (...) {
+    //         std::cerr << "Unknown exception in testMinimalGTSAM()" << std::endl;
+    //     }
+    // }
+
+
+    void testMinimalGTSAM() {
+        try {
+            // gtsam::ISAM2 isam_;
+            gtsam::SharedNoiseModel odometry_noise_;
+            gtsam::SharedNoiseModel prior_noise_;
+            prior_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 1e-3, 1e-3, 1e-3, 1e-3, 1e-3, 1e-3).finished());
+            odometry_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
+
+            std::cout << "Running minimal GTSAM test..." << std::endl;
+            
+            // Create a fresh local ISAM2 instance (not using class member)
+            gtsam::ISAM2Params parameters;
+            gtsam::ISAM2 local_isam(parameters);
+            
+            // Create a simple graph with just the prior
+            gtsam::NonlinearFactorGraph graph;
+            gtsam::Values initial;
+            
+            // Add a prior on pose 1
+            gtsam::SharedNoiseModel noise = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
+            gtsam::Pose3 pose1(gtsam::Rot3::identity(), gtsam::Point3(0, 0, 0));
+            graph.add(gtsam::PriorFactor<gtsam::Pose3>(1, pose1, noise));
+            initial.insert(1, pose1);
+            
+            // Try updating ISAM2
+            std::cout << "Updating iSAM2 with prior..." << std::endl;
+            local_isam.update(graph, initial);
+            std::cout << "Prior update successful." << std::endl;
+            
+            // Add a single constraint
+            graph = gtsam::NonlinearFactorGraph(); // Clear graph
+            gtsam::Values values; // New values
+            
+            // Create a simple constraint from pose 1 to pose 2
+            gtsam::Pose3 rel_pose(gtsam::Rot3::Ypr(0.1, 0.0, 0.0), gtsam::Point3(1.0, 0.0, 0.0));
+            graph.add(gtsam::BetweenFactor<gtsam::Pose3>(1, 2, rel_pose, noise));
+            
+            // Add initial estimate for pose 2
+            gtsam::Pose3 pose2 = pose1.compose(rel_pose);
+            values.insert(2, pose2);
+            
+            // Try updating ISAM2 again
+            std::cout << "Updating iSAM2 with constraint..." << std::endl;
+            local_isam.update(graph, values);
+            std::cout << "Constraint update successful." << std::endl;
+            
+            // Calculate and print final result
+            gtsam::Values result = local_isam.calculateEstimate();
+            std::cout << "Optimization complete with " << result.size() << " poses" << std::endl;
+            
+        } catch (const std::exception& e) {
+            std::cerr << "GTSAM Exception: " << e.what() << std::endl;
+        } catch (...) {
+            std::cerr << "Unknown exception in testMinimalGTSAM()" << std::endl;
+        }
+    }
+
 
     void keyframeDataCallback(const woodhouse::KeyframeData::ConstPtr& msg) {
         // // Print the scan_index from the received message
@@ -94,14 +224,8 @@ public:
             frame_i.point_cloud = msg->point_cloud;
             frame_i.odom_constraint = msg->odom_constraint;
             frames_[msg->scan_index] = frame_i;
-            // cout << "holding on to frame" << msg->scan_index << "in pose graph node" << endl;
-            updateAbsolutePose(msg->scan_index);
+            updateAbsolutePose(msg->scan_index); //based on sequential keyframe registration (if available, otherwise fall back to odometry)
         }        
-
-        //TODO -- insert pose graph optimization here
-        //updateOptimizedPoses()
-
-        //TODO -- after pose graph has convergd a bit try to register rearby point clouds that aren't in constraints yet
 
         publishKeyframePoses();
 
@@ -112,20 +236,18 @@ public:
 
         // // save odom constraints to text file
         appendPoseToCSV("pose_data.csv", 0, msg->last_scan_index, msg->scan_index, msg->odom_constraint);
-        //hold on to constraints internally
-        updateConstraints(0, msg->last_scan_index, msg->scan_index, msg->odom_constraint);
+        //hold on to constraints internally -- don't actually use odom constraints in graph soln for now
+        // updateConstraints(msg->last_scan_index, msg->scan_index, msg->odom_constraint);
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     }
 
     void loopClosureCallback(const woodhouse::LoopClosed::ConstPtr& msg) {
         cout << "Received loop closure constraint between: " << msg->scan1_index << " and " << msg->scan2_index << endl;
-        // cout << msg->loop_closure_constraint << endl;
 
-        // save loop closure constraint to text file ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // subsequent keyframes -- flag with 1
         if (msg->scan2_index - msg->scan1_index == 1){ 
             appendPoseToCSV("pose_data.csv", 1, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
-            updateConstraints(1, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+            updateConstraints(msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
             //hold on to SKR and associate with frame
             frames_[msg->scan1_index].sequential_keyframe_registration = msg->loop_closure_constraint;
         }
@@ -134,12 +256,18 @@ public:
             //ignore instances where ICP diverges
             if (msg->failed_to_converge == false){
                 appendPoseToCSV("pose_data.csv", 2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
-                updateConstraints(2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+                updateConstraints(msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
+
+                //TODO -- run pose graph optimization
+                // optimizeConstraints();
+                // gtsam::Values ans = isam_.calculate_estimate();
+
+                //TODO -- after pose graph has convergd a bit try to register rearby point clouds that aren't in constraints yet
+                
             }
-            //use all
-            // appendPoseToCSV("pose_data.csv", 2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
         }
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // optimizeConstraints(); //need to optimize every time we add something to the graph?
+
 
     }
 
@@ -180,7 +308,6 @@ public:
         }else{
             //otherwise we are doing a loop closure constraint (use yaw difference provided by scan context 
             //  to seed ICP)
-            //TODO-- sign on yaw_seed might need to be flipped...
             float yaw_seed = msg->yaw_diff_rad;
             here_are_the_clouds_msg.X0 = vector<float>{0., 0., 0., 0., 0., -yaw_seed};
         }
@@ -208,7 +335,8 @@ public:
         ROS_INFO("PointCloud saved to: %s", filename.c_str());
     }
 
-    //purely based on sequential keyframe registration
+    //right now this is purely based on sequential keyframe registration
+    // TODO-- integrate raw Sequential Keyframe Registrations back until we reach parts of optimized graph
     void updateAbsolutePose(int scan_index) {
         if (scan_index == 0) {
             frames_[scan_index].world_pose.position.x = 0.0;
@@ -239,6 +367,99 @@ public:
         }
     }
 
+
+    //TODO -- loop through frames_[i] and update world pose position and orientation according to results in graph 
+    // void optimizeConstraints() {
+    //     try {
+    //         std::cout << "Using iSAM2 to perform graph optimization" << std::endl;
+            
+    //         // First time initialization
+    //         static bool first_run = true;
+    //         if (first_run) {
+    //             // Create a fresh ISAM2 instance
+    //             gtsam::ISAM2Params parameters;
+    //             parameters.relinearizeThreshold = 0.01;
+    //             parameters.relinearizeSkip = 1;
+    //             isam_ = gtsam::ISAM2(parameters);
+                
+    //             // Add prior on first pose
+    //             gtsam::NonlinearFactorGraph prior_graph;
+    //             gtsam::Values prior_values;
+                
+    //             gtsam::Pose3 prior_pose(gtsam::Rot3::identity(), gtsam::Point3(0, 0, 0));
+    //             prior_graph.add(gtsam::PriorFactor<gtsam::Pose3>(1, prior_pose, prior_noise_));
+    //             prior_values.insert(1, prior_pose);
+                
+    //             isam_.update(prior_graph, prior_values);
+    //             first_run = false;
+                
+    //             // Initialize constraint tracking
+    //             processed_constraints_.resize(constraints_.size(), false);
+    //         }
+            
+    //         // Resize processed_constraints_ if needed
+    //         if (processed_constraints_.size() < constraints_.size()) {
+    //             processed_constraints_.resize(constraints_.size(), false);
+    //         }
+            
+    //         // Process only unprocessed constraints
+    //         for (size_t i = 0; i < constraints_.size(); i++) {
+    //             if (processed_constraints_[i]) {
+    //                 continue; // Skip already processed constraints
+    //             }
+                
+    //             const auto& constraint = constraints_[i];
+                
+    //             // Extract constraint data
+    //             double x = -constraint[0];
+    //             double y = -constraint[1];
+    //             double z = -constraint[2];
+    //             double roll = -constraint[3];
+    //             double pitch = -constraint[4];
+    //             double yaw = -constraint[5];
+    //             int keyframe1 = static_cast<int>(constraint[6]);
+    //             int keyframe2 = static_cast<int>(constraint[7]);
+                
+    //             // Create separate graph and values for this constraint
+    //             gtsam::NonlinearFactorGraph new_graph;
+    //             gtsam::Values new_values;
+                
+    //             // Create between factor
+    //             gtsam::Rot3 rotation = gtsam::Rot3::Ypr(yaw, pitch, roll);
+    //             gtsam::Point3 translation(x, y, z);
+    //             gtsam::Pose3 relative_pose(rotation, translation);
+                
+    //             new_graph.add(gtsam::BetweenFactor<gtsam::Pose3>(keyframe1, keyframe2, relative_pose, odometry_noise_));
+                
+    //             // Check if the second keyframe needs an initial estimate
+    //             if (!isam_.valueExists(keyframe2)) {
+    //                 if (isam_.valueExists(keyframe1)) {
+    //                     gtsam::Values current = isam_.calculateEstimate();
+    //                     gtsam::Pose3 prev_pose = current.at<gtsam::Pose3>(keyframe1);
+    //                     new_values.insert(keyframe2, prev_pose.compose(relative_pose));
+    //                 }
+    //             }
+                
+    //             // Update ISAM2 with this constraint
+    //             isam_.update(new_graph, new_values);
+                
+    //             // Mark this constraint as processed
+    //             processed_constraints_[i] = true;
+    //         }
+            
+    //         // Perform final optimization
+    //         isam_.update();
+            
+    //         // Print result for debugging
+    //         gtsam::Values result = isam_.calculateEstimate();
+    //         std::cout << "Optimization complete with " << result.size() << " poses" << std::endl;
+            
+    //     } catch (const std::exception& e) {
+    //         std::cerr << "GTSAM Exception: " << e.what() << std::endl;
+    //     } catch (...) {
+    //         std::cerr << "Unknown exception in optimizeConstraints()" << std::endl;
+    //     }
+    // }
 
     bool isQuaternionZero(const geometry_msgs::Quaternion& q) {
         return q.x == 0.0 && q.y == 0.0 && q.z == 0.0 && q.w == 0.0;
@@ -271,9 +492,9 @@ public:
         new_pose.position.y = t_new.y();
         new_pose.position.z = t_new.z();
 
-        std::cout << "q_base: " << q_base.coeffs().transpose() << std::endl;
-        std::cout << "q_rel: " << q_rel.coeffs().transpose() << std::endl;
-        std::cout << "q_new: " << q_new.coeffs().transpose() << std::endl;
+        // std::cout << "q_base: " << q_base.coeffs().transpose() << std::endl;
+        // std::cout << "q_rel: " << q_rel.coeffs().transpose() << std::endl;
+        // std::cout << "q_new: " << q_new.coeffs().transpose() << std::endl;
 
         return new_pose;
     }
@@ -298,7 +519,12 @@ private:
     ros::Subscriber loop_closure_sub_;
     ros::Publisher here_are_the_clouds_pub_;
     ros::Publisher keyframe_pose_pub_;
-
+    map<int, Keyframe> frames_;
+    vector<vector<double>> constraints_; // [x, y, z, r, p, y, keyframe1, keyframe2]
+    // gtsam::ISAM2 isam_;
+    // gtsam::SharedNoiseModel odometry_noise_;
+    // gtsam::SharedNoiseModel prior_noise_;
+    // std::vector<bool> processed_constraints_; // Track which constraints we've processed
 
     Eigen::MatrixXf convertPCLtoEigen(const pcl::PointCloud<pcl::PointXYZ>::Ptr& pcl_cloud) {
         Eigen::MatrixXf eigen_matrix(pcl_cloud->size(), 3);
@@ -358,7 +584,7 @@ private:
         // ROS_INFO("Appended pose to CSV: scan_index = %d", scan1_index);
     }
 
-    void updateConstraints(int constraint_type, int scan1_index, int scan2_index, const geometry_msgs::Pose& pose){
+    void updateConstraints(int scan1_index, int scan2_index, const geometry_msgs::Pose& pose){
         double x = pose.position.x;
         double y = pose.position.y;
         double z = pose.position.z;
@@ -367,8 +593,7 @@ private:
         double roll, pitch, yaw;
         tf::Matrix3x3(q).getRPY(roll, pitch, yaw);
 
-        vector<double> new_constraint = {static_cast<double>(constraint_type), 
-                                         x, 
+        vector<double> new_constraint = {x,
                                          y, 
                                          z, 
                                          roll, 
@@ -376,7 +601,21 @@ private:
                                          yaw, 
                                          static_cast<double>(scan1_index),
                                          static_cast<double>(scan2_index)}; 
+        // zero out rpy for first constraint (rare issue in odom can cause NaN values here) -- SR not run between first keyframes anyways(?) 
+        // if (constraints_.size() == 0){
+        //     new_constraint[4] = 0;
+        //     new_constraint[5] = 0;
+        //     new_constraint[6] = 0;
+        // }
         constraints_.push_back(new_constraint);
+
+        cout << "\n Constraints: " << endl;
+        for (auto row : constraints_){
+            for (auto e : row){
+                cout << e << " ";
+            }
+            cout << endl;
+        }
     }
 
 };
