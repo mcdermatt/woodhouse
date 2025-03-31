@@ -19,6 +19,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lboost_system -DGTSAM_USE_SYSTEM_EIGEN=
 # add_definitions(-DEIGEN_ALIGN_16)
 # add_definitions(-DEIGEN_DONT_ALIGN_STATICALLY)
 
+add_definitions(-DEIGEN_DONT_VECTORIZE)
+add_definitions(-DEIGEN_DISABLE_UNALIGNED_ARRAY_ASSERT)
+add_definitions(-DEIGEN_DONT_ALIGN)
+
 # find_package(PCL REQUIRED PATHS ~/ROS/src/pcl-pcl-1.10.0/build NO_DEFAULT_PATH)
 # include_directories(${PCL_INCLUDE_DIRS})
 # link_directories(${PCL_LIBRARY_DIRS})
@@ -80,9 +84,8 @@ catkin_package(
 
 # Set optimization flags
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native") #was this before
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2") #-march=native is problematic with GTSAM??
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -fno-tree-vectorize -fno-inline") #Test for debugging-- way too slow
-
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3") #test
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2") # THIS IS STABLE -march=native is problematic with GTSAM
 
 include_directories(
   include #not sure why this was breaking laptop earlier
@@ -115,6 +118,9 @@ target_link_libraries(pose_graph_node
   tbb
   gtsam
 )
+
+set_target_properties(pose_graph_node PROPERTIES COMPILE_FLAGS "-O2") #TEST
+# set_target_properties(pose_graph_node PROPERTIES COMPILE_FLAGS "-O0") #WORKS RELIABLY
 
 add_executable(loop_closer_node 
                 src/loop_closer.cpp)
