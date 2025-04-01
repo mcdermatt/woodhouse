@@ -256,7 +256,7 @@ public:
             // cout << "got rev fitness" << endl;
             double alignment_fitness = (forward_fitness + reverse_fitness)/2;
 
-            double alignment_thresh = 0.5; //was 0.5 (indoor?)
+            double alignment_thresh = 0.6; //was 0.5 (indoor?)
             loop_closure_msg.failed_to_converge = false;
             if (alignment_fitness > alignment_thresh){
                 loop_closure_msg.failed_to_converge = true;
