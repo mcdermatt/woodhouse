@@ -400,7 +400,8 @@ def draw_body_frame_axis(x, disp = []):
 def plot_results(disp, result, ij, marginals = None, draw_axis = False):
     
     #plot coordinates of point centers
-    for i in range(result.size()): #loop through all elements in results
+    for i in range(1,result.size()): #loop through all elements in results
+        # print(i)
         p = result.atPose3(i).matrix()
         p_center = Points([[p[0,-1], p[1,-1],  p[2,-1]]], r = 5)
         disp.append(p_center)
@@ -418,7 +419,7 @@ def plot_results(disp, result, ij, marginals = None, draw_axis = False):
             #TODO: plot last ellispe
             
     #draw constraints using ij
-    for c in range(len(ij)):
+    for c in range(1,len(ij)):
         pt1 = result.atPose3(ij[c,0]).translation()   #get coords of results i and j 
         pt2 = result.atPose3(ij[c,1]).translation()
         L = Line(p0 = pt1, p1 = pt2, lw = 1)

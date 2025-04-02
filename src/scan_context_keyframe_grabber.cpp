@@ -276,7 +276,7 @@ public:
     Eigen::VectorXf X0;
 
 private:
-    const float dist_thresh = 0.50; //magnitude translation to trigger re-keyframe (0.5 indoor 2.0? outdoor)
+    const float dist_thresh = 0.125; //magnitude translation to trigger re-keyframe (0.5 indoor 2.0? outdoor)
     const int frame_thresh = 10;
     const double heading_thresh = 0.4; // magnitude of heading change that triggers automatic re-keyframe (radians)
     bool limit_keyframe_search_radius = true;

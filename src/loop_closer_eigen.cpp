@@ -276,16 +276,15 @@ public:
             loop_closure_constraint_pub_.publish(loop_closure_msg);
             std::cout << "Successfully published loop_closure_msg" << std::endl;
         }        
-        //was getting a segfault here from PCL 1.10 on laptop (not sure why)
     }
 
     bool containsNaN(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud) {
         for (const auto& point : cloud->points) {
             if (std::isnan(point.x) || std::isnan(point.y) || std::isnan(point.z)) {
-                return true; // Found NaN
+                return true;
             }
         }
-        return false; // No NaN values
+        return false;
     }
 
     // Function to calculate the distance of a point to a plane
