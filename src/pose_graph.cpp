@@ -93,7 +93,8 @@ public:
         // cout << "attempting to spin up gtsam" << endl;
 
         prior_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 1e-3, 1e-3, 1e-3, 1e-3, 1e-3, 1e-3).finished());
-        odometry_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
+        odometry_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.01, 0.01, 0.01).finished());
+        loop_closure_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
 
     }
 
@@ -108,20 +109,59 @@ public:
             frame_i.last_scan_index=msg -> last_scan_index;
             frame_i.point_cloud = msg->point_cloud;
             frame_i.odom_constraint = msg->odom_constraint;
-            // Explicitly initialize world_pose to zero quat as flag for updateAbsolutePose
-            frame_i.world_pose.position.x = 0.0;
-            frame_i.world_pose.position.y = 0.0;
-            frame_i.world_pose.position.z = 0.0;
-            frame_i.world_pose.orientation.w = 0.0;
-            frame_i.world_pose.orientation.x = 0.0;
-            frame_i.world_pose.orientation.y = 0.0;
-            frame_i.world_pose.orientation.z = 0.0;
-            // Initialize sequential_keyframe_registration to zero quaternion
-            // so we know it hasn't been set yet
-            // frame_i.sequential_keyframe_registration.orientation.w = 0.0;
-            // frame_i.sequential_keyframe_registration.orientation.x = 0.0;
-            // frame_i.sequential_keyframe_registration.orientation.y = 0.0;
-            // frame_i.sequential_keyframe_registration.orientation.z = 0.0;
+            // Set initial world pose
+            if (msg->scan_index == 0) {
+                // First frame - set to identity
+                frame_i.world_pose.position.x = 0.0;
+                frame_i.world_pose.position.y = 0.0;
+                frame_i.world_pose.position.z = 0.0;
+                frame_i.world_pose.orientation.w = 1.0;
+                frame_i.world_pose.orientation.x = 0.0;
+                frame_i.world_pose.orientation.y = 0.0;
+                frame_i.world_pose.orientation.z = 0.0;
+            } else {
+                // Get the previous frame's pose
+                int prev_index = msg->last_scan_index;
+                if (frames_.find(prev_index) != frames_.end()) {
+                    // Debug: Print previous frame's orientation
+                    ROS_INFO("Previous frame %d orientation: w=%f, x=%f, y=%f, z=%f",
+                            prev_index,
+                            frames_[prev_index].world_pose.orientation.w,
+                            frames_[prev_index].world_pose.orientation.x,
+                            frames_[prev_index].world_pose.orientation.y,
+                            frames_[prev_index].world_pose.orientation.z);                    
+                    // Use the relative transform to compute this frame's world pose
+                    // if (!isQuaternionZero(frame_i.sequential_keyframe_registration.orientation)) {
+                    //     frame_i.world_pose = applyTransform(
+                    //         frames_[prev_index].world_pose,
+                    //         frame_i.sequential_keyframe_registration);
+                    // } else {
+                        // frame_i.world_pose = applyTransform(
+                        //     frames_[prev_index].world_pose,
+                        //     frame_i.odom_constraint);
+                    // }
+                    // Debug: just set to most recent transform as debug
+                    frame_i.world_pose = frames_[prev_index].world_pose;
+
+                    ROS_INFO("New frame %d orientation: w=%f, x=%f, y=%f, z=%f",
+                            msg->scan_index,
+                            frame_i.world_pose.orientation.w,
+                            frame_i.world_pose.orientation.x,
+                            frame_i.world_pose.orientation.y,
+                            frame_i.world_pose.orientation.z);
+                } else {
+                    ROS_WARN("Previous frame %d not found, setting to identity", prev_index);
+                    frame_i.world_pose.position.x = 0.0;
+                    frame_i.world_pose.position.y = 0.0;
+                    frame_i.world_pose.position.z = 0.0;
+                    frame_i.world_pose.orientation.w = 1.0;
+                    frame_i.world_pose.orientation.x = 0.0;
+                    frame_i.world_pose.orientation.y = 0.0;
+                    frame_i.world_pose.orientation.z = 0.0;
+                }
+            }            
+
+
             frames_[msg->scan_index] = frame_i;
 
             // DEAD RECKONING ONLY via sequential keyframe registration (if available, otherwise fall back to odometry)
@@ -154,7 +194,7 @@ public:
         }
         //actual loop closure -- flag with 2
         else{
-            //ignore instances where ICP diverges
+            //ignore instances where ICP diverges (generally happens in loop closure, need to maintain connection between SKRs)
             if (msg->failed_to_converge == false){
                 appendPoseToCSV("pose_data.csv", 2, msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
                 updateConstraints(msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
@@ -234,51 +274,6 @@ public:
         ROS_INFO("PointCloud saved to: %s", filename.c_str());
     }
 
-    // TODO-- integrate raw Sequential Keyframe Registrations back until we reach parts of optimized graph
-    void updateAbsolutePose(int scan_index) {
-        // Case 1: This is the origin keyframe
-        if (scan_index == 0) {
-            frames_[scan_index].world_pose.position.x = 0.0;
-            frames_[scan_index].world_pose.position.y = 0.0;
-            frames_[scan_index].world_pose.position.z = 0.0;
-            frames_[scan_index].world_pose.orientation.w = 1.0;
-            frames_[scan_index].world_pose.orientation.x = 0.0;
-            frames_[scan_index].world_pose.orientation.y = 0.0;
-            frames_[scan_index].world_pose.orientation.z = 0.0;
-            return;
-        }
-        
-        // Check if this frame already has a valid pose from GTSAM optimization
-        if (!isQuaternionZero(frames_[scan_index].world_pose.orientation) && 
-            (frames_[scan_index].world_pose.position.x != 0.0 || 
-            frames_[scan_index].world_pose.position.y != 0.0 || 
-            frames_[scan_index].world_pose.position.z != 0.0)) {
-            // Already has a valid optimized pose from GTSAM, no need to update
-            return;
-        }
-        
-        // Frame needs initial pose estimate via dead reckoning
-        int last_index = frames_[scan_index].last_scan_index;
-        if (frames_.find(last_index) == frames_.end()) {
-            ROS_WARN("Missing keyframe %d, cannot compute absolute pose for %d", last_index, scan_index);
-            return;
-        }
-        
-        // Recursively update the last keyframe's absolute pose first
-        updateAbsolutePose(last_index);
-        
-        // Use sequential_keyframe_registration if available, otherwise fall back to odometry
-        if (!isQuaternionZero(frames_[scan_index].sequential_keyframe_registration.orientation)) {
-            frames_[scan_index].world_pose = applyTransform(
-                frames_[last_index].world_pose,
-                frames_[scan_index].sequential_keyframe_registration);
-        } else {
-            frames_[scan_index].world_pose = applyTransform(
-                frames_[last_index].world_pose,
-                frames_[scan_index].odom_constraint);
-        }
-    }
-
     void optimizeConstraints() {
         try {
             std::cout << "Using iSAM2 to perform graph optimization" << std::endl;
@@ -328,9 +323,13 @@ public:
             // Add each constraint to the graph
             for (const auto& constraint : constraints_) {
                 // Extract constraint data (with sign correction)
+                //debug 
                 // double x = constraint[0];
                 // double y = constraint[1];
                 // double z = constraint[2];
+                // double roll = constraint[3];
+                // double pitch = constraint[4];
+                // double yaw = constraint[5];
                 double x = -constraint[0];
                 double y = -constraint[1];
                 double z = -constraint[2];
@@ -343,7 +342,7 @@ public:
                 // Create the relative pose transformation
                 gtsam::Rot3 rotation = gtsam::Rot3::Ypr(yaw, pitch, roll);
 
-                //TODO-- Sign flip works in notebook but not here!??!
+                // // TODO-- Sign flip works in notebook but not here!??!
                 // //DUBUG-- FIX SIGN FLIP UPON LOOP CLOSURE?
                 // if (keyframe1 - keyframe2 > 1){
                 //     x *= -1;
@@ -355,7 +354,12 @@ public:
                 gtsam::Pose3 relative_pose(rotation, translation);
                 
                 // Add between factor
-                new_graph.add(gtsam::BetweenFactor<gtsam::Pose3>(keyframe1, keyframe2, relative_pose, odometry_noise_));
+                if (keyframe1 - keyframe2 > 1){
+                    // use larger noise for loop closure constraints
+                    new_graph.add(gtsam::BetweenFactor<gtsam::Pose3>(keyframe1, keyframe2, relative_pose, loop_closure_noise_));
+                }else{
+                    new_graph.add(gtsam::BetweenFactor<gtsam::Pose3>(keyframe1, keyframe2, relative_pose, odometry_noise_));
+                }
                 
                 // Add initial values for new keyframes
                 if (!isam.valueExists(keyframe1)) {
@@ -404,6 +408,26 @@ public:
                 }
             }
             //TODO for elements in frames_ but not in graph yet, use odometry to update absolute poses? 
+            // After updating all optimized frames
+            int max_optimized_key = -1;
+            for (const auto& key_value : result) {
+                int keyframe_idx = static_cast<int>(key_value.key);
+                if (keyframe_idx > max_optimized_key) {
+                    max_optimized_key = keyframe_idx;
+                }
+            }
+
+            // Fill in frames not optimized yet
+            for (const auto& kv : frames_) {
+                int idx = kv.first;
+                if (!result.exists(idx)) {
+                    // Use last optimized frame’s pose if possible
+                    if (frames_.find(max_optimized_key) != frames_.end()) {
+                        frames_[idx].world_pose = frames_[max_optimized_key].world_pose;
+                        std::cout << "frame " << idx << " not in optimized result, defaulting to last known pose" << std::endl;
+                    }
+                }
+            }
 
         } catch (const std::exception& e) {
             std::cerr << "GTSAM Exception: " << e.what() << std::endl;
@@ -413,36 +437,68 @@ public:
     }
 
     bool isQuaternionZero(const geometry_msgs::Quaternion& q) {
-        return q.x == 0.0 && q.y == 0.0 && q.z == 0.0 && q.w == 0.0;
+        // A quaternion is zero if all components are zero or very close to zero
+        const double epsilon = 1e-6;
+        return (std::abs(q.w) < epsilon && 
+                std::abs(q.x) < epsilon && 
+                std::abs(q.y) < epsilon && 
+                std::abs(q.z) < epsilon);
     }
-
 
     geometry_msgs::Pose applyTransform(const geometry_msgs::Pose& base, 
                                     const geometry_msgs::Pose& relative) {
+
+        // Apply the same sign flips as in optimizeConstraints()
+        geometry_msgs::Pose flipped_relative = relative;
+        flipped_relative.position.x = -relative.position.x;
+        flipped_relative.position.y = -relative.position.y;
+        flipped_relative.position.z = -relative.position.z;
+        
+        // For quaternions, negating x, y, z components is equivalent to negating roll, pitch, yaw
+        // (while keeping w the same)
+        flipped_relative.orientation.x = -relative.orientation.x;
+        flipped_relative.orientation.y = -relative.orientation.y;
+        flipped_relative.orientation.z = -relative.orientation.z;
+        
+        // Create GTSAM Pose3 objects
+        gtsam::Rot3 base_rot = gtsam::Rot3::Quaternion(
+            base.orientation.w, 
+            base.orientation.x, 
+            base.orientation.y, 
+            base.orientation.z);
+        gtsam::Point3 base_trans(base.position.x, base.position.y, base.position.z);
+        gtsam::Pose3 base_pose(base_rot, base_trans);
+        
+        // gtsam::Rot3 rel_rot = gtsam::Rot3::Quaternion(
+        //     relative.orientation.w, 
+        //     relative.orientation.x, 
+        //     relative.orientation.y, 
+        //     relative.orientation.z);
+        // gtsam::Point3 rel_trans(relative.position.x, relative.position.y, relative.position.z);
+        //flip sign to match optimizeConstraints()
+        gtsam::Rot3 rel_rot = gtsam::Rot3::Quaternion(
+            flipped_relative.orientation.w, 
+            flipped_relative.orientation.x, 
+            flipped_relative.orientation.y, 
+            flipped_relative.orientation.z);
+        gtsam::Point3 rel_trans(flipped_relative.position.x, flipped_relative.position.y, flipped_relative.position.z);
+        gtsam::Pose3 rel_pose(rel_rot, rel_trans);
+        
+        // Use GTSAM's compose method - exactly the same as in optimizeConstraints()
+        gtsam::Pose3 result = base_pose.compose(rel_pose);
+        
+        // Convert back to geometry_msgs::Pose
         geometry_msgs::Pose new_pose;
-
-        // Convert poses to Eigen types for easier math
-        Eigen::Quaterniond q_base(base.orientation.w, base.orientation.x, 
-                                base.orientation.y, base.orientation.z);
-        Eigen::Quaterniond q_rel(relative.orientation.w, relative.orientation.x, 
-                                relative.orientation.y, relative.orientation.z);
-        Eigen::Vector3d t_base(base.position.x, base.position.y, base.position.z);
-        Eigen::Vector3d t_rel(relative.position.x, relative.position.y, relative.position.z);
-
-        // Apply transformation
-        Eigen::Quaterniond q_new = q_base * q_rel;
-        q_new.normalize();
-        Eigen::Vector3d t_new = t_base + q_base * (-1*t_rel); //sign got flipped somewhere... 
-
-        // Convert back to geometry_msgs
-        new_pose.orientation.w = q_new.w();
-        new_pose.orientation.x = q_new.x();
-        new_pose.orientation.y = q_new.y();
-        new_pose.orientation.z = q_new.z();
-        new_pose.position.x = t_new.x();
-        new_pose.position.y = t_new.y();
-        new_pose.position.z = t_new.z();
-
+        new_pose.position.x = result.translation().x();
+        new_pose.position.y = result.translation().y();
+        new_pose.position.z = result.translation().z();
+        
+        gtsam::Quaternion q = result.rotation().toQuaternion();
+        new_pose.orientation.w = q.w();
+        new_pose.orientation.x = q.x();
+        new_pose.orientation.y = q.y();
+        new_pose.orientation.z = q.z();
+        
         return new_pose;
     }
 
@@ -469,6 +525,7 @@ private:
     map<int, Keyframe> frames_;
     vector<vector<double>> constraints_; // [x, y, z, r, p, y, keyframe1, keyframe2]
     gtsam::SharedNoiseModel odometry_noise_;
+    gtsam::SharedNoiseModel loop_closure_noise_;
     gtsam::SharedNoiseModel prior_noise_;
 
     Eigen::MatrixXf convertPCLtoEigen(const pcl::PointCloud<pcl::PointXYZ>::Ptr& pcl_cloud) {

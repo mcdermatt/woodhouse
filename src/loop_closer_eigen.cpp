@@ -17,6 +17,8 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <pcl/registration/icp.h>
 #include <pcl/common/transforms.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/common/common.h>
 #include <Eigen/Dense>
 #include <random>
 #include <nav_msgs/Odometry.h>
@@ -107,6 +109,8 @@ public:
         cout << "1: " << pc1_matrix.size() << " 2: " << pc2_matrix.size() << endl;
 
         if (pc1_matrix.size() > 1000 && pc2_matrix.size() > 1000){
+            //create a loop closure msg (to send back to pose graph node)
+            woodhouse::LoopClosed loop_closure_msg;
 
             //remove ground plane in eigen (PCL 1.10 unstable with noetic on my laptop?)
             float threshold = 0.15;
@@ -120,7 +124,7 @@ public:
             Eigen::MatrixXf pc1_matrix_fine = downsampleCloudEigen(pc1_matrix, voxel_size_fine);
             Eigen::MatrixXf pc2_matrix_fine = downsampleCloudEigen(pc2_matrix, voxel_size_fine);
 
-            //RUN ICP instead (more robust with perspective shift) ~~~~~~~~~~~
+            //RUN ICP instead of ICET (more robust with perspective shift) ~~~~~~~~~~~
             // Initialize ICP
             pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
 
@@ -136,7 +140,7 @@ public:
             *cloud_source_fine = *eigenToPCL(pc1_matrix_fine);
             *cloud_target_fine = *eigenToPCL(pc2_matrix_fine);
 
-            //debug-- publish cloud showing downsampled and ground plane-less cloud
+            //for debug-- publish cloud showing downsampled and ground plane-less cloud
             sensor_msgs::PointCloud2 cloud1_msg;
             pcl::toROSMsg(*cloud_source_fine, cloud1_msg);
             cloud1_msg.header.stamp = ros::Time::now();
@@ -211,7 +215,18 @@ public:
                 if (!icp.hasConverged()) {
                     X << 0., 0., 0., 0., 0., 0.; 
                     std::cout << "ICP did not converge!" << std::endl;
-                    break;
+                    loop_closure_msg.failed_to_converge = true;
+                    loop_closure_msg.scan1_index = msg->scan1_index;
+                    loop_closure_msg.scan2_index = msg->scan2_index;
+                    loop_closure_msg.loop_closure_constraint.position.x = 0.;
+                    loop_closure_msg.loop_closure_constraint.position.y = 0.;
+                    loop_closure_msg.loop_closure_constraint.position.z = 0.;
+                    loop_closure_msg.loop_closure_constraint.orientation.x = 0.;
+                    loop_closure_msg.loop_closure_constraint.orientation.y = 0.;
+                    loop_closure_msg.loop_closure_constraint.orientation.z = 0.;
+                    loop_closure_msg.loop_closure_constraint.orientation.w = 1.;
+                    loop_closure_constraint_pub_.publish(loop_closure_msg);
+                    return;
                 }
 
                 //coarse to fine registration
@@ -242,23 +257,28 @@ public:
             std::cout << "X = " << X.transpose() << std::endl;
             //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-            //publish as loop closure msg (need to send back to pose graph node)
-            woodhouse::LoopClosed loop_closure_msg;
-
-            // // //one way distances
+            //one way distances
             // double alignment_fitness = icp.getFitnessScore(); 
             // Bidirectional distances
             double forward_fitness = icp.getFitnessScore(2.0);
-            // cout << "got fwd fitness" << endl;
             icp.setInputSource(cloud_target_fine);
             icp.setInputTarget(aligned_cloud);
             double reverse_fitness = icp.getFitnessScore(2.0);
-            // cout << "got rev fitness" << endl;
             double alignment_fitness = (forward_fitness + reverse_fitness)/2;
+            // test for inlier ratio as well
+            // float inlier_calc_max_dist = 0.1; //tough to get a static value that works well for both indoor and outdoor scenes
+            float inlier_calc_max_dist = 0.027f * average_range(cloud_target_fine); //scale in proportion to average range in new point clouds
+            //best trial with 0.03, but very unstable there...
+            cout << "inlier_calc_max_dist: " << inlier_calc_max_dist << endl;
 
-            double alignment_thresh = 0.6; //was 0.5 (indoor?)
+            float inlier_ratio = computeInlierRatio(aligned_cloud, cloud_target_fine, inlier_calc_max_dist);
+            cout << "inlier_ratio: " << inlier_ratio << endl;
+
+            float inlier_ratio_thresh = 0.2;
+            double alignment_thresh = 0.4; //was 0.5 (indoor?)
+
             loop_closure_msg.failed_to_converge = false;
-            if (alignment_fitness > alignment_thresh){
+            if (alignment_fitness > alignment_thresh || inlier_ratio < inlier_ratio_thresh){
                 loop_closure_msg.failed_to_converge = true;
             }
             loop_closure_msg.scan1_index = msg->scan1_index;
@@ -277,6 +297,47 @@ public:
             std::cout << "Successfully published loop_closure_msg" << std::endl;
         }        
     }
+
+    float estimateCloudScale(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+    {
+        pcl::PointXYZ min_pt, max_pt;
+        pcl::getMinMax3D(*cloud, min_pt, max_pt);
+        float dx = max_pt.x - min_pt.x;
+        float dy = max_pt.y - min_pt.y;
+        float dz = max_pt.z - min_pt.z;
+        return std::sqrt(dx*dx + dy*dy + dz*dz); // Diagonal length
+    }
+    float average_range(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud) {
+        float total = 0.0f;
+        for (const auto& pt : cloud->points) {
+            total += std::sqrt(pt.x*pt.x + pt.y*pt.y + pt.z*pt.z);
+        }
+        return total / cloud->size();
+    }
+
+
+    float computeInlierRatio(pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_source,
+                            pcl::PointCloud<pcl::PointXYZ>::Ptr target,
+                            float max_dist = 0.5f){
+        pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+        kdtree.setInputCloud(target);
+
+        int inlier_count = 0;
+        std::vector<int> indices(1);
+        std::vector<float> sqr_dists(1);
+
+        for (const auto& pt : transformed_source->points)
+        {
+            if (kdtree.nearestKSearch(pt, 1, indices, sqr_dists) > 0)
+            {
+                if (std::sqrt(sqr_dists[0]) < max_dist)
+                    inlier_count++;
+            }
+        }
+
+        return static_cast<float>(inlier_count) / static_cast<float>(transformed_source->size());
+    }
+
 
     bool containsNaN(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud) {
         for (const auto& point : cloud->points) {

@@ -52,14 +52,10 @@ git clone https://github.com/borglab/gtsam.git
 git checkout 4.3.0 
 
 mkdir build && cd build
-<!-- cmake .. -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_WITH_EIGEN_MKL=OFF -DGTSAM_BUILD_WITH_MARCH_NATIVE=ON -DCMAKE_BUILD_TYPE=Release -->
-
-cmake .. -DGTSAM_BUILD_WITH_MARCH_NATIVE=OFF -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_WITH_TBB=ON -DGTSAM_BUILD_PACKAGING=ON -DADDRESS_SANITIZER=OFF
-
+cmake .. -DGTSAM_BUILD_WITH_MARCH_NATIVE=OFF -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_BUILD_PACKAGING=ON
 make -j$(nproc)
 sudo make install
 
-pip install jupyter pybind11
 ```
 https://github.com/MIT-SPARK/Kimera-VIO-ROS/issues/12
 
@@ -102,17 +98,18 @@ Run node to convert button output to twist message
 
 # TODO
 
-#### Platform
-
-* [ ] publish battery status
-
 #### Mapping and Localization
 
-* [ ] compile gtsam with python binds
-* [ ] Fix reflections off back of laptop! 
+* [ ] Use ICP convergence stability as test for solution quality
+* [ ] Prune bad constraints in graph
+* [ ] Debug mysterious sign flip
+* [ ] Add catch for occational NaN output in ICET dead reckoning
 
 #### Hardware
 
-* [ ] Add assemble new rear belt tensioners
-
 * [ ] Push updated CAD
+* [ ] Fix reflections off back of laptop! 
+
+#### Platform
+
+* [ ] publish battery status

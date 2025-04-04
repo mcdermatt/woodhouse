@@ -91,7 +91,7 @@ public:
     // loop thresh
     const double SEARCH_RATIO = 1.0; // 0.1 for fast comparison, no Brute-force, but search 10 % is okay. // not was in the original conf paper, but improved ver.
     // const double SC_DIST_THRES = 0.2; // empirically 0.1-0.2 is fine (rare false-alarms) for 20x60 polar context (but for 0.15 <, DCS or ICP fit score check (e.g., in LeGO-LOAM) should be required for robustness)
-    const double SC_DIST_THRES = 0.3; // 0.4-0.6 is good choice for using with robust kernel (e.g., Cauchy, DCS) + icp fitness threshold / if not, recommend 0.1-0.15
+    const double SC_DIST_THRES = 0.4; // 0.4-0.6 is good choice for using with robust kernel (e.g., Cauchy, DCS) + icp fitness threshold / if not, recommend 0.1-0.15
     //^ used 0.3 for indoor apartment dataset
 
     // config 

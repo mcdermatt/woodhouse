@@ -280,7 +280,7 @@ private:
     const int frame_thresh = 10;
     const double heading_thresh = 0.4; // magnitude of heading change that triggers automatic re-keyframe (radians)
     bool limit_keyframe_search_radius = true;
-    double radius_threshold = 2.0; //if limiting search radius-- 2. indoor 10? outdoor?
+    double radius_threshold = 2.; //if limiting search radius-- 2. indoor 10? outdoor?
 
     ros::NodeHandle nh_;
     tf2_ros::Buffer tfBuffer_;
