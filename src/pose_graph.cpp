@@ -323,13 +323,6 @@ public:
             // Add each constraint to the graph
             for (const auto& constraint : constraints_) {
                 // Extract constraint data (with sign correction)
-                //debug 
-                // double x = constraint[0];
-                // double y = constraint[1];
-                // double z = constraint[2];
-                // double roll = constraint[3];
-                // double pitch = constraint[4];
-                // double yaw = constraint[5];
                 double x = -constraint[0];
                 double y = -constraint[1];
                 double z = -constraint[2];
@@ -341,14 +334,6 @@ public:
                 
                 // Create the relative pose transformation
                 gtsam::Rot3 rotation = gtsam::Rot3::Ypr(yaw, pitch, roll);
-
-                // // TODO-- Sign flip works in notebook but not here!??!
-                // //DUBUG-- FIX SIGN FLIP UPON LOOP CLOSURE?
-                // if (keyframe1 - keyframe2 > 1){
-                //     x *= -1;
-                //     y *= -1;
-                //     z *= -1;
-                // }
 
                 gtsam::Point3 translation(x, y, z);
                 gtsam::Pose3 relative_pose(rotation, translation);
