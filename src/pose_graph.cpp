@@ -91,16 +91,24 @@ public:
         frames_[0].odom_constraint.orientation.z = 0.0;
 
         // cout << "attempting to spin up gtsam" << endl;
+        // Create ISAM2 with parameters
+        gtsam::ISAM2Params parameters;
+        parameters.relinearizeThreshold = 0.01;
+        parameters.relinearizeSkip = 1;
+        isam_ = gtsam::ISAM2(parameters);
 
         prior_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 1e-3, 1e-3, 1e-3, 1e-3, 1e-3, 1e-3).finished());
         odometry_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.01, 0.01, 0.01).finished());
         loop_closure_noise_ = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
-
+        dense_count_ = 0;                        //counter var
+        dense_count_thresh_ = 1;                 //find a new dense constraint every dense_count_thresh_ frames
+        dense_constraint_start_ = 20;            //hold off on looking for dense constraints until we have this many keyframes
+        dense_constraint_distance_thresh_ = 1.0; //don't find dense constraints between keyframes with indices <= this value 
     }
 
     void keyframeDataCallback(const woodhouse::KeyframeData::ConstPtr& msg) {
         // // Print the scan_index from the received message
-        ROS_INFO("Received keyframe with scan_index: %d", msg->scan_index);
+        // ROS_INFO("Received keyframe with scan_index: %d", msg->scan_index);
         // cout << msg->odom_constraint << endl;
 
         //add new frame to internal map
@@ -124,12 +132,12 @@ public:
                 int prev_index = msg->last_scan_index;
                 if (frames_.find(prev_index) != frames_.end()) {
                     // Debug: Print previous frame's orientation
-                    ROS_INFO("Previous frame %d orientation: w=%f, x=%f, y=%f, z=%f",
-                            prev_index,
-                            frames_[prev_index].world_pose.orientation.w,
-                            frames_[prev_index].world_pose.orientation.x,
-                            frames_[prev_index].world_pose.orientation.y,
-                            frames_[prev_index].world_pose.orientation.z);                    
+                    // ROS_INFO("Previous frame %d orientation: w=%f, x=%f, y=%f, z=%f",
+                    //         prev_index,
+                    //         frames_[prev_index].world_pose.orientation.w,
+                    //         frames_[prev_index].world_pose.orientation.x,
+                    //         frames_[prev_index].world_pose.orientation.y,
+                    //         frames_[prev_index].world_pose.orientation.z);                    
                     // Use the relative transform to compute this frame's world pose
                     // if (!isQuaternionZero(frame_i.sequential_keyframe_registration.orientation)) {
                     //     frame_i.world_pose = applyTransform(
@@ -143,12 +151,12 @@ public:
                     // Debug: just set to most recent transform as debug
                     frame_i.world_pose = frames_[prev_index].world_pose;
 
-                    ROS_INFO("New frame %d orientation: w=%f, x=%f, y=%f, z=%f",
-                            msg->scan_index,
-                            frame_i.world_pose.orientation.w,
-                            frame_i.world_pose.orientation.x,
-                            frame_i.world_pose.orientation.y,
-                            frame_i.world_pose.orientation.z);
+                    // ROS_INFO("New frame %d orientation: w=%f, x=%f, y=%f, z=%f",
+                    //         msg->scan_index,
+                    //         frame_i.world_pose.orientation.w,
+                    //         frame_i.world_pose.orientation.x,
+                    //         frame_i.world_pose.orientation.y,
+                    //         frame_i.world_pose.orientation.z);
                 } else {
                     ROS_WARN("Previous frame %d not found, setting to identity", prev_index);
                     frame_i.world_pose.position.x = 0.0;
@@ -180,10 +188,125 @@ public:
         //hold on to constraints internally -- don't actually use odom constraints in graph soln for now
         // updateConstraints(msg->last_scan_index, msg->scan_index, msg->odom_constraint);
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        
+        // cout << dense_count_ << endl;
+        if(constraints_.size() >= dense_constraint_start_){
+            if (dense_count_ == dense_count_thresh_ - 1){
+                // addDenseConstraint();
+                //TON of dense constraints
+                for (int i = 0; i < 3; i++){
+                    addDenseConstraint();
+                }
+                dense_count_ = 0;
+            }else{dense_count_ += 1;}
+        }
+
     }
 
+    void addDenseConstraint(){
+        //make sure not to go looking for dense constraints until isam_ is initialized
+        //select indices
+        // three selection criteria:
+        //    1) keyframe centers need to be within some threshold distance
+        //    2) keyframe indices should be temporally spaced out (greater than 2 indices apart) 
+        //    3) we should favor selection in areas that have fewer loop closure constraints (if possible)
+        //        -> use a map to count total constraints associated with each keyframe, select frame with fewer if possible
+        cout << "\n Constraints: " << endl;
+        for (auto row : constraints_){
+            // for (auto e : row){
+                // cout << e << " ";
+            for (int e = 6; e < 8; e++){
+                cout << row[e] << " "; 
+            }
+            cout << endl;
+        }
+
+        std::map<int,int> constraint_counts;
+        for (const auto& row : constraints_){
+            int first = static_cast<int>(row[6]);
+            constraint_counts[first]++;
+        }
+        for (const auto& [idx1, count] : constraint_counts) {
+            std::cout << "idx1 = " << idx1 << ", count = " << count << std::endl;
+        }
+
+        //select first index
+        int last_kf = static_cast<int>(constraints_.back().at(6));
+        int idx1 = getRandomInt(last_kf-10);
+        int idx2 = 1;
+        Eigen::Vector3d pose_at_idx1(
+            frames_[idx1].world_pose.position.x,
+            frames_[idx1].world_pose.position.y,
+            frames_[idx1].world_pose.position.z
+        );
+        //loop through rest of keyframes to see if we get anything close enough
+        idx2 = 1;
+        while (idx2 < last_kf - 5){
+            if (idx1 == idx2){
+                idx2++;
+            }
+            Eigen::Vector3d pose_at_idx2(
+                frames_[idx2].world_pose.position.x,
+                frames_[idx2].world_pose.position.y,
+                frames_[idx2].world_pose.position.z
+            );  
+            double distance = (pose_at_idx1 - pose_at_idx2).norm();
+            if (distance < dense_constraint_distance_thresh_){
+                //found potentially good pair
+                cout << pose_at_idx1 << endl;
+                cout << pose_at_idx2 << endl;
+                break;
+            }
+            idx2++; 
+        }
+
+        cout << "adding dense constraint between " << idx1 << " and " << idx2 << endl;
+
+        //get relative transforms from iSAM graph
+        vector<double> X21 = getRelativeTransformBetweenKeyframes(idx2, idx1);
+
+        //send scan indices, initial transform, and raw point clouds to loop closer node
+        woodhouse::HereAreTheClouds here_are_the_clouds_msg;
+        here_are_the_clouds_msg.scan1_index = idx1;
+        here_are_the_clouds_msg.scan2_index = idx2;
+        here_are_the_clouds_msg.point_cloud1 = frames_[idx1].point_cloud;
+        here_are_the_clouds_msg.point_cloud2 = frames_[idx2].point_cloud;
+        here_are_the_clouds_msg.X0 = vector<float>{static_cast<float>(X21[0]),
+                                                   static_cast<float>(X21[1]),
+                                                   static_cast<float>(X21[2]),
+                                                   static_cast<float>(X21[3]),
+                                                   static_cast<float>(X21[4]),
+                                                   static_cast<float>(X21[5])};
+        here_are_the_clouds_pub_.publish(here_are_the_clouds_msg);
+
+        //save to .csv for debug
+        //normal loop closure constraint type is flagged as 2, setting this as 3 for debug purposes
+        appendPoseToCSV("pose_data.csv", 3, idx1, idx2, X21);
+    }
+
+    std::vector<double> getRelativeTransformBetweenKeyframes(int keyframe1, int keyframe2) {
+        if (!isam_.valueExists(keyframe1) || !isam_.valueExists(keyframe2)) {
+            throw std::runtime_error("One or both keyframes do not exist in the current estimate.");
+        }
+
+        gtsam::Pose3 pose1 = isam_.calculateEstimate<gtsam::Pose3>(keyframe1);
+        gtsam::Pose3 pose2 = isam_.calculateEstimate<gtsam::Pose3>(keyframe2);
+        gtsam::Pose3 relative_pose = pose1.between(pose2);
+
+        gtsam::Point3 t = relative_pose.translation();
+        gtsam::Rot3 R = relative_pose.rotation();
+
+        gtsam::Vector3 ypr = R.ypr();  // Yaw, Pitch, Roll
+        double yaw = ypr(0);
+        double pitch = ypr(1);
+        double roll = ypr(2);
+
+        return {t.x(), t.y(), t.z(), roll, pitch, yaw};
+    }
+
+
     void loopClosureCallback(const woodhouse::LoopClosed::ConstPtr& msg) {
-        cout << "Received loop closure constraint between: " << msg->scan1_index << " and " << msg->scan2_index << endl;
+        // cout << "Received loop closure constraint between: " << msg->scan1_index << " and " << msg->scan2_index << endl;
 
         // subsequent keyframes -- flag with 1
         if (msg->scan2_index - msg->scan1_index == 1){ 
@@ -200,10 +323,7 @@ public:
                 updateConstraints(msg->scan1_index, msg->scan2_index, msg->loop_closure_constraint);
 
                 //run pose graph optimization-- ideally we should only be running it in here BUT without odometry constraints GTSAM won't have a node associated with our loop closures?
-                // optimizeConstraints();
-
-                //TODO -- after pose graph has convergd a bit try to register rearby point clouds that aren't in constraints yet
-                
+                // optimizeConstraints();                
             }
         }
         optimizeConstraints(); //TODO-- do we actually need to optimize every time we add something to the graph?
@@ -212,7 +332,7 @@ public:
 
     void getTheseCloudsCallback(const woodhouse::GetTheseClouds::ConstPtr& msg) {
         // Print the scan_index from the received message
-        std::cout << "Pose_graph_node: publishing clouds for indices:" << msg->scan1_index << " and " << msg->scan2_index << std::endl;
+        // std::cout << "Pose_graph_node: publishing clouds for indices:" << msg->scan1_index << " and " << msg->scan2_index << std::endl;
 
         woodhouse::HereAreTheClouds here_are_the_clouds_msg;
         here_are_the_clouds_msg.scan1_index = msg->scan1_index;
@@ -238,7 +358,7 @@ public:
             double yaw   = atan2(R(1,0), R(0,0));
             Eigen::Vector3d rpy(roll, pitch, yaw);
 
-            cout << "seeding roll: " << rpy[0] << " pitch: " << rpy[1] << " yaw: " << rpy[2] << endl;
+            // cout << "seeding roll: " << rpy[0] << " pitch: " << rpy[1] << " yaw: " << rpy[2] << endl;
 
             here_are_the_clouds_msg.X0 = vector<float>{frames_[msg->scan2_index].odom_constraint.position.x,
                                                        frames_[msg->scan2_index].odom_constraint.position.y,
@@ -271,34 +391,21 @@ public:
         }
 
         csv_file.close();
-        ROS_INFO("PointCloud saved to: %s", filename.c_str());
+        // ROS_INFO("PointCloud saved to: %s", filename.c_str());
     }
 
     void optimizeConstraints() {
-        try {
-            std::cout << "Using iSAM2 to perform graph optimization" << std::endl;
-            
-            // Initialize ISAM2 and add prior only on first run
-            static bool first_run = true;
-            static gtsam::ISAM2 isam;
-            
-            if (first_run) {
-                // Create ISAM2 with parameters
-                gtsam::ISAM2Params parameters;
-                parameters.relinearizeThreshold = 0.01;
-                parameters.relinearizeSkip = 1;
-                isam = gtsam::ISAM2(parameters);
-                
-                // Add prior factor for the first pose
+        try {           
+            // Initialize ISAM2 and add prior only on first run            
+            if (first_run_) {               
                 gtsam::NonlinearFactorGraph prior_graph;
                 gtsam::Values prior_values;
                 
                 gtsam::Pose3 prior_pose(gtsam::Rot3::identity(), gtsam::Point3(0, 0, 0));
                 prior_graph.add(gtsam::PriorFactor<gtsam::Pose3>(1, prior_pose, prior_noise_));
-                prior_values.insert(1, prior_pose);
-                
-                isam.update(prior_graph, prior_values);
-                first_run = false;
+                prior_values.insert(1, prior_pose);                
+                isam_.update(prior_graph, prior_values);
+                first_run_ = false;
             }
             
             // Process all constraints in a single batch
@@ -308,20 +415,20 @@ public:
             
             // Only calculate current estimate once if needed
             bool need_current_estimate = false;
-            for (const auto& constraint : constraints_) {
+            for (const auto& constraint : constraints_new_) {
                 int keyframe2 = static_cast<int>(constraint[7]);
-                if (!isam.valueExists(keyframe2)) {
+                if (!isam_.valueExists(keyframe2)) {
                     need_current_estimate = true;
                     break;
                 }
             }
             
             if (need_current_estimate) {
-                current_estimate = isam.calculateEstimate();
+                current_estimate = isam_.calculateEstimate();
             }
             
             // Add each constraint to the graph
-            for (const auto& constraint : constraints_) {
+            for (const auto& constraint : constraints_new_) {
                 // Extract constraint data (with sign correction)
                 double x = -constraint[0];
                 double y = -constraint[1];
@@ -347,13 +454,13 @@ public:
                 }
                 
                 // Add initial values for new keyframes
-                if (!isam.valueExists(keyframe1)) {
+                if (!isam_.valueExists(keyframe1)) {
                     // If the first pose in a constraint doesn't exist, initialize it at origin
                     // This should rarely happen as keyframe1 is usually already in the graph
                     new_values.insert(keyframe1, gtsam::Pose3());
                 }
                 
-                if (!isam.valueExists(keyframe2)) {
+                if (!isam_.valueExists(keyframe2)) {
                     // Initialize the second keyframe based on the relative transformation from the first
                     gtsam::Pose3 prev_pose = current_estimate.at<gtsam::Pose3>(keyframe1);
                     new_values.insert(keyframe2, prev_pose.compose(relative_pose));
@@ -361,14 +468,14 @@ public:
             }
             
             // Update ISAM2 with all new factors and values at once
-            isam.update(new_graph, new_values);
-            isam.update(); // Perform final optimization
+            isam_.update(new_graph, new_values);
+            isam_.update(); // Perform final optimization
+
+            // Clear the new constraints after processing
+            constraints_new_.clear();
             
-            // // Clear the constraints after processing
-            // constraints_.clear();
-            
-            gtsam::Values result = isam.calculateEstimate();
-            std::cout << "Optimization complete with " << result.size() << " poses" << std::endl;
+            gtsam::Values result = isam_.calculateEstimate();
+            // std::cout << "Optimization complete with " << result.size() << " poses" << std::endl;
             // Update world_pose for each keyframe in frames_
             for (const auto& key_value : result) {
                 gtsam::Key key = key_value.key;
@@ -389,7 +496,7 @@ public:
                     frames_[keyframe_idx].world_pose.orientation.x = quat.x();
                     frames_[keyframe_idx].world_pose.orientation.y = quat.y();
                     frames_[keyframe_idx].world_pose.orientation.z = quat.z();
-                    std::cout << "frame " << keyframe_idx << " world_pose " << translation << std::endl;
+                    // std::cout << "frame " << keyframe_idx << " world_pose " << translation << std::endl;
                 }
             }
             //TODO for elements in frames_ but not in graph yet, use odometry to update absolute poses? 
@@ -409,7 +516,7 @@ public:
                     // Use last optimized frame’s pose if possible
                     if (frames_.find(max_optimized_key) != frames_.end()) {
                         frames_[idx].world_pose = frames_[max_optimized_key].world_pose;
-                        std::cout << "frame " << idx << " not in optimized result, defaulting to last known pose" << std::endl;
+                        // std::cout << "frame " << idx << " not in optimized result, defaulting to last known pose" << std::endl;
                     }
                 }
             }
@@ -508,10 +615,17 @@ private:
     ros::Publisher here_are_the_clouds_pub_;
     ros::Publisher keyframe_pose_pub_;
     map<int, Keyframe> frames_;
-    vector<vector<double>> constraints_; // [x, y, z, r, p, y, keyframe1, keyframe2]
+    vector<vector<double>> constraints_; // [x, y, z, r, p, y, keyframe1, keyframe2] //all constraints
+    vector<vector<double>> constraints_new_; // [x, y, z, r, p, y, keyframe1, keyframe2] //new constraints to be added to graph
     gtsam::SharedNoiseModel odometry_noise_;
     gtsam::SharedNoiseModel loop_closure_noise_;
     gtsam::SharedNoiseModel prior_noise_;
+    int dense_count_;
+    int dense_count_thresh_;
+    int dense_constraint_start_;
+    double dense_constraint_distance_thresh_;
+    gtsam::ISAM2 isam_;
+    bool first_run_ = true;
 
     Eigen::MatrixXf convertPCLtoEigen(const pcl::PointCloud<pcl::PointXYZ>::Ptr& pcl_cloud) {
         Eigen::MatrixXf eigen_matrix(pcl_cloud->size(), 3);
@@ -519,6 +633,13 @@ private:
             eigen_matrix.row(i) << pcl_cloud->points[i].x, pcl_cloud->points[i].y, pcl_cloud->points[i].z;
         }
         return eigen_matrix;
+    }
+
+    int getRandomInt(int n) {
+        std::random_device rd;                      // seed
+        std::mt19937 gen(rd());                     // Mersenne Twister RNG
+        std::uniform_int_distribution<> dist(1, n); // inclusive range [1, n]
+        return dist(gen);
     }
 
     sensor_msgs::PointCloud2 convertEigenToROS(const Eigen::MatrixXf& eigenPointCloud, const std_msgs::Header& header) {
@@ -550,7 +671,7 @@ private:
 
         csv_file << "constraint_type,scan1_index,scan2_index,position_x,position_y,position_z,orientation_x,orientation_y,orientation_z,orientation_w\n";
         csv_file.close();
-        ROS_INFO("Initialized pose CSV file: %s", filename.c_str());
+        // ROS_INFO("Initialized pose CSV file: %s", filename.c_str());
     }
 
     void appendPoseToCSV(const std::string& filename, int constraint_type, int scan1_index, int scan2_index, const geometry_msgs::Pose& pose) {
@@ -570,6 +691,48 @@ private:
         csv_file.close();
         // ROS_INFO("Appended pose to CSV: scan_index = %d", scan1_index);
     }
+
+    //overloading for cases when we just get the xyzrpy back from the isam_ graph 
+    void appendPoseToCSV(const std::string& filename, int constraint_type, int scan1_index, int scan2_index, vector<double> X) {
+        // Open the CSV file in append mode
+        std::ofstream csv_file(filename, std::ios::app);
+        if (!csv_file.is_open()) {
+            ROS_ERROR("Failed to open pose CSV file for appending: %s", filename.c_str());
+            return;
+        }
+
+        geometry_msgs::Pose pose = vectorToPose(X); 
+
+        // Append the scan index and pose information
+        csv_file << constraint_type << "," << scan1_index << "," << scan2_index << ","
+                 << pose.position.x << "," << pose.position.y << "," << pose.position.z << ","
+                 << pose.orientation.x << "," << pose.orientation.y << "," 
+                 << pose.orientation.z << "," << pose.orientation.w << "\n";
+
+        csv_file.close();
+        // ROS_INFO("Appended pose to CSV: scan_index = %d", scan1_index);
+    }
+
+    geometry_msgs::Pose vectorToPose(const std::vector<double>& vec) {
+        if (vec.size() != 6) {
+            throw std::runtime_error("Expected vector of size 6: [x, y, z, roll, pitch, yaw]");
+        }
+
+        geometry_msgs::Pose pose;
+        pose.position.x = vec[0];
+        pose.position.y = vec[1];
+        pose.position.z = vec[2];
+
+        tf2::Quaternion q;
+        q.setRPY(vec[3], vec[4], vec[5]);  // Roll, Pitch, Yaw
+        pose.orientation.x = q.x();
+        pose.orientation.y = q.y();
+        pose.orientation.z = q.z();
+        pose.orientation.w = q.w();
+
+        return pose;
+    }
+
 
     void updateConstraints(int scan1_index, int scan2_index, const geometry_msgs::Pose& pose){
         double x = pose.position.x;
@@ -595,22 +758,28 @@ private:
         //     new_constraint[6] = 0;
         // }
         constraints_.push_back(new_constraint);
+        constraints_new_.push_back(new_constraint);
 
         //sort by first index (index 6)
         std::sort(constraints_.begin(), constraints_.end(), 
             [](const std::vector<double>& a, const std::vector<double>& b) {
                 return a[6] < b[6];
             });
+        std::sort(constraints_new_.begin(), constraints_new_.end(), 
+            [](const std::vector<double>& a, const std::vector<double>& b) {
+                return a[6] < b[6];
+            });
 
-        cout << "\n Constraints: " << endl;
-        for (auto row : constraints_){
-            // for (auto e : row){
-                // cout << e << " ";
-            for (int e = 6; e < 8; e++){
-                cout << row[e] << " "; 
-            }
-            cout << endl;
-        }
+
+        // cout << "\n Constraints: " << endl;
+        // for (auto row : constraints_){
+        //     // for (auto e : row){
+        //         // cout << e << " ";
+        //     for (int e = 6; e < 8; e++){
+        //         cout << row[e] << " "; 
+        //     }
+        //     cout << endl;
+        // }
     }
 
 };
