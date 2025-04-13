@@ -37,10 +37,6 @@
 using namespace std;
 using namespace Eigen;
 
-// //not sure if this is going to help
-// #define EIGEN_DONT_ALIGN_STATICALLY
-// #define GTSAM_ALLOW_DEPRECATED_SINCE_V4
-
 struct Keyframe {
     int scan_index;                                       // Index of the scan
     int last_scan_index;                                  // Last keyframe index for relative odometry constraint
@@ -90,8 +86,6 @@ public:
         frames_[0].odom_constraint.orientation.y = 0.0;
         frames_[0].odom_constraint.orientation.z = 0.0;
 
-        // cout << "attempting to spin up gtsam" << endl;
-        // Create ISAM2 with parameters
         gtsam::ISAM2Params parameters;
         parameters.relinearizeThreshold = 0.01;
         parameters.relinearizeSkip = 1;
@@ -107,7 +101,6 @@ public:
     }
 
     void keyframeDataCallback(const woodhouse::KeyframeData::ConstPtr& msg) {
-        // // Print the scan_index from the received message
         // ROS_INFO("Received keyframe with scan_index: %d", msg->scan_index);
         // cout << msg->odom_constraint << endl;
 
@@ -130,14 +123,7 @@ public:
             } else {
                 // Get the previous frame's pose
                 int prev_index = msg->last_scan_index;
-                if (frames_.find(prev_index) != frames_.end()) {
-                    // Debug: Print previous frame's orientation
-                    // ROS_INFO("Previous frame %d orientation: w=%f, x=%f, y=%f, z=%f",
-                    //         prev_index,
-                    //         frames_[prev_index].world_pose.orientation.w,
-                    //         frames_[prev_index].world_pose.orientation.x,
-                    //         frames_[prev_index].world_pose.orientation.y,
-                    //         frames_[prev_index].world_pose.orientation.z);                    
+                if (frames_.find(prev_index) != frames_.end()) {             
                     // Use the relative transform to compute this frame's world pose
                     // if (!isQuaternionZero(frame_i.sequential_keyframe_registration.orientation)) {
                     //     frame_i.world_pose = applyTransform(
@@ -150,13 +136,6 @@ public:
                     // }
                     // Debug: just set to most recent transform as debug
                     frame_i.world_pose = frames_[prev_index].world_pose;
-
-                    // ROS_INFO("New frame %d orientation: w=%f, x=%f, y=%f, z=%f",
-                    //         msg->scan_index,
-                    //         frame_i.world_pose.orientation.w,
-                    //         frame_i.world_pose.orientation.x,
-                    //         frame_i.world_pose.orientation.y,
-                    //         frame_i.world_pose.orientation.z);
                 } else {
                     ROS_WARN("Previous frame %d not found, setting to identity", prev_index);
                     frame_i.world_pose.position.x = 0.0;
@@ -171,9 +150,6 @@ public:
 
 
             frames_[msg->scan_index] = frame_i;
-
-            // DEAD RECKONING ONLY via sequential keyframe registration (if available, otherwise fall back to odometry)
-            // updateAbsolutePose(msg->scan_index); 
         }        
 
         publishKeyframePoses();
@@ -186,17 +162,17 @@ public:
         // // save odom constraints to text file
         appendPoseToCSV("pose_data.csv", 0, msg->last_scan_index, msg->scan_index, msg->odom_constraint);
         //hold on to constraints internally -- don't actually use odom constraints in graph soln for now
-        // updateConstraints(msg->last_scan_index, msg->scan_index, msg->odom_constraint);
+        // updateConstraints(msg->last_scan_index, msg->scan_index, msg->odom_constraint); //test uncommenting 4/13...
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         
         // cout << dense_count_ << endl;
         if(constraints_.size() >= dense_constraint_start_){
             if (dense_count_ == dense_count_thresh_ - 1){
-                // addDenseConstraint();
-                //TON of dense constraints
-                for (int i = 0; i < 3; i++){
-                    addDenseConstraint();
-                }
+                addDenseConstraint();
+                // //spam dense constraints
+                // for (int i = 0; i < 3; i++){
+                //     addDenseConstraint();
+                // }
                 dense_count_ = 0;
             }else{dense_count_ += 1;}
         }
@@ -205,59 +181,34 @@ public:
 
     void addDenseConstraint(){
         //make sure not to go looking for dense constraints until isam_ is initialized
-        //select indices
-        // three selection criteria:
-        //    1) keyframe centers need to be within some threshold distance
-        //    2) keyframe indices should be temporally spaced out (greater than 2 indices apart) 
-        //    3) we should favor selection in areas that have fewer loop closure constraints (if possible)
-        //        -> use a map to count total constraints associated with each keyframe, select frame with fewer if possible
-        cout << "\n Constraints: " << endl;
-        for (auto row : constraints_){
-            // for (auto e : row){
-                // cout << e << " ";
-            for (int e = 6; e < 8; e++){
-                cout << row[e] << " "; 
-            }
-            cout << endl;
-        }
 
+        // cout << "\n Constraints: " << endl;
+        // for (auto row : constraints_){
+        //     // for (auto e : row){
+        //         // cout << e << " ";
+        //     for (int e = 6; e < 8; e++){
+        //         cout << row[e] << " "; 
+        //     }
+        //     cout << endl;
+        // }
         std::map<int,int> constraint_counts;
         for (const auto& row : constraints_){
             int first = static_cast<int>(row[6]);
             constraint_counts[first]++;
         }
-        for (const auto& [idx1, count] : constraint_counts) {
-            std::cout << "idx1 = " << idx1 << ", count = " << count << std::endl;
-        }
-
-        //select first index
-        int last_kf = static_cast<int>(constraints_.back().at(6));
-        int idx1 = getRandomInt(last_kf-10);
-        int idx2 = 1;
-        Eigen::Vector3d pose_at_idx1(
-            frames_[idx1].world_pose.position.x,
-            frames_[idx1].world_pose.position.y,
-            frames_[idx1].world_pose.position.z
-        );
-        //loop through rest of keyframes to see if we get anything close enough
-        idx2 = 1;
-        while (idx2 < last_kf - 5){
-            if (idx1 == idx2){
-                idx2++;
-            }
-            Eigen::Vector3d pose_at_idx2(
-                frames_[idx2].world_pose.position.x,
-                frames_[idx2].world_pose.position.y,
-                frames_[idx2].world_pose.position.z
-            );  
-            double distance = (pose_at_idx1 - pose_at_idx2).norm();
-            if (distance < dense_constraint_distance_thresh_){
-                //found potentially good pair
-                cout << pose_at_idx1 << endl;
-                cout << pose_at_idx2 << endl;
-                break;
-            }
-            idx2++; 
+        // for (const auto& [idx1, count] : constraint_counts) {
+        //     std::cout << "idx1 = " << idx1 << ", count = " << count << std::endl;
+        // }
+        int idx1;
+        int idx2;
+        auto candidate = findBestDenseConstraintCandidate();
+        if (candidate) {
+            idx1 = candidate->first;
+            idx2 = candidate->second;
+            dense_candidates_.push_back({idx1,idx2});//hold on to what we've tried using so far
+        } else {
+            std::cout << "No valid dense loop closure candidates found." << std::endl;
+            return;
         }
 
         cout << "adding dense constraint between " << idx1 << " and " << idx2 << endl;
@@ -279,9 +230,50 @@ public:
                                                    static_cast<float>(X21[5])};
         here_are_the_clouds_pub_.publish(here_are_the_clouds_msg);
 
-        //save to .csv for debug
         //normal loop closure constraint type is flagged as 2, setting this as 3 for debug purposes
         appendPoseToCSV("pose_data.csv", 3, idx1, idx2, X21);
+    }
+
+    std::optional<std::pair<int, int>> findBestDenseConstraintCandidate(
+        double search_radius = 2.0,
+        int temporal_threshold = 10
+    ) {
+        std::optional<std::pair<int, int>> best_candidate;
+        double best_score = std::numeric_limits<double>::max(); // lower is better
+
+        // Step 1: Extract sorted list of frame IDs
+        std::vector<int> frame_ids;
+        for (const auto& [id, _] : frames_)
+            frame_ids.push_back(id);
+        if (frame_ids.size() < 7) //prevent segfault
+            return std::nullopt;
+        //skip first keyframe since it doesn't have LC, ignore the last few while graph updates
+        for (size_t i = 2; i < frame_ids.size() - 5; ++i) { 
+            int id1 = frame_ids[i];
+            const auto& pose1 = frames_.at(id1).world_pose;
+
+            for (size_t j = i + 1; j < frame_ids.size()-4; ++j) {
+                int id2 = frame_ids[j];
+                const auto& pose2 = frames_.at(id2).world_pose;
+
+                if (std::abs(id1 - id2) < temporal_threshold)
+                    continue;
+
+                double dist = euclideanDistance(pose1, pose2);
+                if (dist > search_radius)
+                    continue;
+
+                if (constraintExists(id1, id2))
+                    continue;
+
+                // Scoring based only on distance for now
+                if (dist < best_score) {
+                    best_score = dist;
+                    best_candidate = std::make_pair(id1, id2);
+                }
+            }
+        }        
+        return best_candidate; // std::nullopt if none found
     }
 
     std::vector<double> getRelativeTransformBetweenKeyframes(int keyframe1, int keyframe2) {
@@ -432,10 +424,18 @@ public:
                 // Extract constraint data (with sign correction)
                 double x = -constraint[0];
                 double y = -constraint[1];
+                double yaw = -constraint[5];
+
+                // full 6DOF motion
                 double z = -constraint[2];
                 double roll = -constraint[3];
                 double pitch = -constraint[4];
-                double yaw = -constraint[5];
+
+                // // planar motion 
+                // double z = 0.;
+                // double roll = 0.;
+                // double pitch = 0.;
+                
                 int keyframe1 = static_cast<int>(constraint[6]);
                 int keyframe2 = static_cast<int>(constraint[7]);
                 
@@ -626,6 +626,7 @@ private:
     double dense_constraint_distance_thresh_;
     gtsam::ISAM2 isam_;
     bool first_run_ = true;
+    vector<vector<int>> dense_candidates_; //to track what we've attempted to use for dense loop closure
 
     Eigen::MatrixXf convertPCLtoEigen(const pcl::PointCloud<pcl::PointXYZ>::Ptr& pcl_cloud) {
         Eigen::MatrixXf eigen_matrix(pcl_cloud->size(), 3);
@@ -641,6 +642,36 @@ private:
         std::uniform_int_distribution<> dist(1, n); // inclusive range [1, n]
         return dist(gen);
     }
+
+    // Utility: compute 3D Euclidean distance between two geometry_msgs::Pose positions
+    double euclideanDistance(const geometry_msgs::Pose& a, const geometry_msgs::Pose& b) {
+        double dx = a.position.x - b.position.x;
+        double dy = a.position.y - b.position.y;
+        double dz = a.position.z - b.position.z;
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    // Utility: check if a constraint already exists between two keyframes
+    //TODO-- if repeatedly sampling the same keyframe pair that fails to converge over and over again
+    //       make additional vector<int> to track failures and check it here...
+    bool constraintExists(int id1, int id2) {
+        for (const auto& c : constraints_) {
+            int c1 = static_cast<int>(c[6]);
+            int c2 = static_cast<int>(c[7]);
+            if ((c1 == id1 && c2 == id2) || (c1 == id2 && c2 == id1)) {
+                return true;
+            }
+        }
+        // Check in dense_candidates_
+        for (const auto& pair : dense_candidates_) {
+            if ((pair[0] == id1 && pair[1] == id2) || (pair[0] == id2 && pair[1] == id1)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 
     sensor_msgs::PointCloud2 convertEigenToROS(const Eigen::MatrixXf& eigenPointCloud, const std_msgs::Header& header) {
     pcl::PointCloud<pcl::PointXYZ> pclPointCloud;

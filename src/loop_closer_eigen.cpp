@@ -274,8 +274,8 @@ public:
             float inlier_ratio = computeInlierRatio(aligned_cloud, cloud_target_fine, inlier_calc_max_dist);
             cout << "inlier_ratio: " << inlier_ratio << endl;
 
-            float inlier_ratio_thresh = 0.25; //was 0.2 (indoor)
-            double alignment_thresh = 0.4; //was 0.5 (indoor)
+            float inlier_ratio_thresh = 0.35; //was 0.2 (indoor) (higher harder)
+            double alignment_thresh = 0.30; //was 0.5 (indoor) (lower harder)
 
             loop_closure_msg.failed_to_converge = false;
             if (alignment_fitness > alignment_thresh || inlier_ratio < inlier_ratio_thresh){
