@@ -6,7 +6,9 @@
 #include <pcl/point_types.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
-#include <tf2_ros/buffer.h>  // Add this line for tf2_ros::Buffer
+#include <tf2_ros/buffer.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Matrix3x3.h>
 #include <pcl/registration/icp.h>
 #include <Eigen/Dense>
 #include <random>
@@ -236,7 +238,8 @@ public:
 
     std::optional<std::pair<int, int>> findBestDenseConstraintCandidate(
         double search_radius = 2.0,
-        int temporal_threshold = 10
+        int temporal_threshold = 5,      //in number of frames
+        double min_yaw_diff_deg = 20.0   //NEW-- only consider keyframes with different heading direction?? 
     ) {
         std::optional<std::pair<int, int>> best_candidate;
         double best_score = std::numeric_limits<double>::max(); // lower is better
@@ -251,6 +254,7 @@ public:
         for (size_t i = 2; i < frame_ids.size() - 5; ++i) { 
             int id1 = frame_ids[i];
             const auto& pose1 = frames_.at(id1).world_pose;
+            double yaw1 = yawFromQuaternion(pose1.orientation);
 
             for (size_t j = i + 1; j < frame_ids.size()-4; ++j) {
                 int id2 = frame_ids[j];
@@ -264,6 +268,16 @@ public:
                     continue;
 
                 if (constraintExists(id1, id2))
+                    continue;
+
+                // Compute yaw difference (in degrees)
+                double yaw2 = yawFromQuaternion(pose2.orientation);
+                double yaw_diff = std::fabs(yaw1 - yaw2);
+                yaw_diff = std::fmod(yaw_diff, 2 * M_PI); // wrap to [0, 2pi]
+                if (yaw_diff > M_PI) yaw_diff = 2 * M_PI - yaw_diff; // wrap to [0, pi]
+                double yaw_diff_deg = yaw_diff * 180.0 / M_PI;
+
+                if (yaw_diff_deg < min_yaw_diff_deg && abs(id1 - id2) < 20)
                     continue;
 
                 // Scoring based only on distance for now
@@ -296,6 +310,13 @@ public:
         return {t.x(), t.y(), t.z(), roll, pitch, yaw};
     }
 
+    double yawFromQuaternion(const geometry_msgs::Quaternion& q) {
+        tf2::Quaternion tf_q(q.x, q.y, q.z, q.w);
+        tf2::Matrix3x3 m(tf_q);
+        double roll, pitch, yaw;
+        m.getRPY(roll, pitch, yaw);
+        return yaw;
+    }
 
     void loopClosureCallback(const woodhouse::LoopClosed::ConstPtr& msg) {
         // cout << "Received loop closure constraint between: " << msg->scan1_index << " and " << msg->scan2_index << endl;
