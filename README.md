@@ -1,26 +1,38 @@
 # Woodhouse
 
-A tracked robotic platform for LiDAR mapping and valet applications
+A tracked robotic platform for LiDAR mapping
 
 ![WIP](https://img.shields.io/badge/status-WIP-yellow)
-
 
 
 <table>
   <tr>
     <td style="text-align: center;">
-      <img src="./demo/frontV2.jpg" width="410" />
+      <img src="./demo/woodhouseCAD.jpg" width="410" />
     </td>
     <td style="text-align: center;">
-      <img src="./demo/road.jpg" width="360" />
+      <img src="./demo/stairs.gif" width="360" />
     </td>
   </tr>
 </table>
 
-
 #### Mapping Overview
 
 <img src="./demo/woodhouse_rqt_graph.png" alt="Node Graph Overview" width="800"/>
+
+* ```rosrun icet odometry_node``` or ```rosrun icet map_maker_node```
+    * Produces raw LiDAR odometry estimates from sensor data stream
+* ```rosrun woodhouse scan_context_node```
+    * Generates new keyframe if the platform has moved enough since the last keyframe
+    * If there's enough similarity between nearby keyframes, asks loop closer node (via pose graph node) to register the two clouds in order to add an additional constraint to the graph.
+* ```rosrun woodhouse loop_closer_node``` or ```rosrun woodhouse loop_closer_eigen_node```
+    * Runs scan registration between arbitrary keyframes
+* ```rosrun woodhouse pose_graph_node```
+    * holds on to all keyframe point clouds and assicoated absolute positions. Uses iSAM2 to optimize all constraints.  
+
+<img src="./demo/indoorHDMap.jpg" alt="Indoor HD Map" width="800"/>
+
+Example map generated in real time by driving the above system around my apartment at high speed. Red dots represent optimized keyframe locations.
 
 # Requirements 
 * joy
@@ -101,15 +113,13 @@ Run node to convert button output to twist message
 #### Mapping and Localization
 
 * [ ] Use ICP convergence stability as test for solution quality
-* [ ] Prune bad constraints in graph
-* [ ] Debug mysterious sign flip
-* [ ] Add catch for occational NaN output in ICET dead reckoning
+* [ ] Move to more efficient sliding window for graph pruning
 
 #### Hardware
 
-* [ ] Push updated CAD
-* [ ] Fix reflections off back of laptop! 
+* [ ] Push CAD 4.1
 
 #### Platform
 
 * [ ] publish battery status
+* [ ] consolidate everything into single launch file
