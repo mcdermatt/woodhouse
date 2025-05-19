@@ -21,7 +21,8 @@ A tracked robotic platform for LiDAR mapping
 <img src="./demo/woodhouse_rqt_graph.png" alt="Node Graph Overview" width="800"/>
 
 * ```rosrun icet odometry_node``` or ```rosrun icet map_maker_node```
-    * Produces raw LiDAR odometry estimates from sensor data stream
+    * Produces raw LiDAR odometry estimates from sensor data stream using my ICET algorithm.
+    * [For full code and documentation on ICET check out the repository here](https://github.com/mcdermatt/ICET)
 * ```rosrun woodhouse scan_context_node```
     * Generates new keyframe if the platform has moved enough since the last keyframe
     * If there's enough similarity between nearby keyframes, asks loop closer node (via pose graph node) to register the two clouds in order to add an additional constraint to the graph.
@@ -32,7 +33,7 @@ A tracked robotic platform for LiDAR mapping
 
 <img src="./demo/indoorHDMap.jpg" alt="Indoor HD Map" width="800"/>
 
-Example map generated in real time by driving the above system around my apartment at high speed. Red dots represent optimized keyframe locations.
+Example map generated in real time by driving the above system around my apartment at high speed. Red dots represent optimized keyframe locations. Blur and ghosting in map is due to my reflective cabinets and tile floors-- outoor demo coming soon!
 
 # Requirements 
 * joy
