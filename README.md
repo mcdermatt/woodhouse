@@ -4,6 +4,15 @@ A tracked robotic platform for LiDAR mapping
 
 ![WIP](https://img.shields.io/badge/status-WIP-yellow)
 
+## Hardware Overview 
+
+<img src="./demo/woodhouseCAD.jpg" alt="Node Graph Overview" width="800"/>
+
+* Fully open source 3D printable design-- [CAD Files Here](https://github.com/mcdermatt/woodhouse/tree/main/CAD)
+* Capable of driving __up snowbanks__ and __down stairs__
+* Vehicle BOM < $500 USD
+* Watertight hull, 50lb max payload, max speed 15 mph
+
 <table>
   <tr>
     <td style="text-align: center;">
@@ -30,15 +39,21 @@ A tracked robotic platform for LiDAR mapping
 * ```rosrun woodhouse pose_graph_node```
     * holds on to all keyframe point clouds and assicoated absolute positions. Uses iSAM2 to optimize all constraints.  
 
+
+<table>
+  <tr>
+    <td style="text-align: center;">
+      <img src="./demo/rawApartment.gif" width="410" />
+    </td>
+    <td style="text-align: center;">
+      <img src="./demo/apartmentPosesLive.gif" width="375" />
+    </td>
+  </tr>
+</table>
+
 <img src="./demo/indoorHDMap.jpg" alt="Indoor HD Map" width="800"/>
 
 Example map generated in real time by driving the above system around my apartment at high speed. Red dots represent optimized keyframe locations. Blur and ghosting in map is due to my reflective cabinets and tile floors-- outoor demo coming soon!
-
-
-## Hardware Overview 
-
-<img src="./demo/woodhouseCAD.jpg" alt="Node Graph Overview" width="600"/>
-
 
 # Requirements 
 * joy
