@@ -4,19 +4,18 @@ A tracked robotic platform for LiDAR mapping
 
 ![WIP](https://img.shields.io/badge/status-WIP-yellow)
 
-
 <table>
   <tr>
     <td style="text-align: center;">
-      <img src="./demo/woodhouseCAD.jpg" width="410" />
+      <img src="./demo/stairsV2.gif" width="312" />
     </td>
     <td style="text-align: center;">
-      <img src="./demo/stairs.gif" width="360" />
+      <img src="./demo/downStairsRaw.gif" width="478" />
     </td>
   </tr>
 </table>
 
-#### Mapping Overview
+## Mapping Overview
 
 <img src="./demo/woodhouse_rqt_graph.png" alt="Node Graph Overview" width="800"/>
 
@@ -34,6 +33,12 @@ A tracked robotic platform for LiDAR mapping
 <img src="./demo/indoorHDMap.jpg" alt="Indoor HD Map" width="800"/>
 
 Example map generated in real time by driving the above system around my apartment at high speed. Red dots represent optimized keyframe locations. Blur and ghosting in map is due to my reflective cabinets and tile floors-- outoor demo coming soon!
+
+
+## Hardware Overview 
+
+<img src="./demo/woodhouseCAD.jpg" alt="Node Graph Overview" width="600"/>
+
 
 # Requirements 
 * joy
@@ -108,6 +113,14 @@ Run node to convert button output to twist message
 ```rosrun teleop_twist_joy teleop_node```
 
 ``` python3 cmd_vel_to_odrive.py```
+
+### Ublox GPS
+
+```
+sudo stty -F /dev/ttyUSB0 38400
+sudo cat /dev/ttyUSB0
+roslaunch ublox_gps neo_f10n.launch
+```
 
 # TODO
 
