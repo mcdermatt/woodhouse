@@ -1,6 +1,6 @@
 # Woodhouse
 
-A tracked robotic platform for LiDAR mapping
+A tracked robotic platform and end-to-end LiDAR SLAM system
 
 ![WIP](https://img.shields.io/badge/status-WIP-yellow)
 
@@ -141,8 +141,8 @@ roslaunch ublox_gps neo_f10n.launch
 
 #### Mapping and Localization
 
-* [ ] Use ICP convergence stability as test for solution quality
-* [ ] Move to more efficient sliding window for graph pruning
+* [ ] Integrate real-time graph pruning
+* [ ] Add interface for GPS priors
 
 #### Hardware
 
